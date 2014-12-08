@@ -8,7 +8,7 @@
 require 'racc/parser.rb'
 
 
-if respond_to? :require_relative
+if Kernel.respond_to? :require_relative
   require_relative './../parser'
 else
   require 'parser'
