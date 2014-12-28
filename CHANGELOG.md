@@ -1,13 +1,26 @@
 Changelog
 =========
 
+v2.2.0.1 (2014-12-27)
+---------------------
+
+Bugs fixed:
+ * lexer.rl, lexer/literal: "{'a'::": don't parse as quoted label. (Peter Zotov)
+ * Update syntax deviation warning to reflect 2.2 release. (Peter Zotov)
+
+v2.2.0 (2014-12-25)
+-------------------
+
+Bugs fixed:
+ * lexer.rl: "{'x':1,'y':{}}": fix lex_state after tLABEL_END. (Peter Zotov)
+
 v2.2.0.pre.8 (2014-11-19)
 -------------------------
 
 API modifications:
  * parser/current: update 2.1 to 2.1.5 (fixes #174). (Peter Zotov)
 
-v2.2.0.pre.8 (2014-11-03)
+v2.2.0.pre.7 (2014-11-03)
 -------------------------
 
 Bugs fixed:
