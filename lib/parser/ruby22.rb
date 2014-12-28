@@ -14,15 +14,12 @@ else
   require 'parser'
 end
 
-warn "warning: you are loading parser/ruby22 from #{caller[0]}."
-warn "warning: Ruby 2.2 is not released yet and parser support may be incomplete."
-
 Parser.check_for_encoding_support
 
 module Parser
   class Ruby22 < Parser::Base
 
-module_eval(<<'...end ruby22.y/module_eval...', 'ruby22.y', 2342)
+module_eval(<<'...end ruby22.y/module_eval...', 'ruby22.y', 2339)
 
   def version
     22

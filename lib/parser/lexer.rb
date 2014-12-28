@@ -1,8 +1,4 @@
 # -*- encoding:utf-8; warn-indent:false -*-
-# -*- encoding:utf-8; warn-indent:false -*-
-# -*- encoding:utf-8; warn-indent:false -*-
-# -*- encoding:utf-8; warn-indent:false -*-
-# -*- encoding:utf-8; warn-indent:false -*-
 
 # line 1 "lib/parser/lexer.rl"
 
@@ -10943,7 +10939,7 @@ begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11005,7 +11001,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11093,7 +11089,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11245,7 +11241,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11299,7 +11295,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11387,7 +11383,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11492,7 +11488,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11533,7 +11529,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11638,7 +11634,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
@@ -11671,7 +11667,7 @@ p = p - 1; begin
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
-      lookahead = @source[@te...@te+1]
+      lookahead = @source[@te...@te+2]
       lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
     end
 
