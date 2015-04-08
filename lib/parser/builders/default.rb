@@ -172,6 +172,13 @@ module Parser
     end
 
     def regexp_compose(begin_t, parts, end_t, options)
+      begin
+        static_regexp(parts, options)
+      rescue RegexpError => e
+        diagnostic :error, :invalid_regexp, { :message => e.message },
+                   loc(begin_t).join(loc(end_t))
+      end
+
       n(:regexp, (parts << options),
         regexp_map(begin_t, end_t, options))
     end
@@ -325,7 +332,7 @@ module Parser
       when :__FILE__
         if @emit_file_line_as_literals
           n(:str, [ node.loc.expression.source_buffer.name ],
-            node.loc)
+            node.loc.dup)
         else
           node
         end
@@ -333,14 +340,14 @@ module Parser
       when :__LINE__
         if @emit_file_line_as_literals
           n(:int, [ node.loc.expression.line ],
-            node.loc)
+            node.loc.dup)
         else
           node
         end
 
       when :__ENCODING__
         n(:const, [ n(:const, [ nil, :Encoding], nil), :UTF_8 ],
-          node.loc)
+          node.loc.dup)
 
       when :ident
         name, = *node
@@ -587,7 +594,7 @@ module Parser
         expr.updated(:arg)
       else
         n(:arg_expr, [ expr ],
-          expr.loc)
+          expr.loc.dup)
       end
     end
 
@@ -598,7 +605,7 @@ module Parser
         expr.updated(:restarg)
       else
         n(:restarg_expr, [ expr ],
-          expr.loc)
+          expr.loc.dup)
       end
     end
 
@@ -607,7 +614,7 @@ module Parser
         expr.updated(:blockarg)
       else
         n(:blockarg_expr, [ expr ],
-          expr.loc)
+          expr.loc.dup)
       end
     end
 
@@ -708,30 +715,8 @@ module Parser
     def match_op(receiver, match_t, arg)
       source_map = send_binary_op_map(receiver, match_t, arg)
 
-      if receiver.type == :regexp &&
-            receiver.children.count == 2 &&
-            receiver.children.first.type == :str
-
-        str_node, opt_node = *receiver
-        regexp_body, = *str_node
-        *regexp_opt  = *opt_node
-
-        if defined?(Encoding)
-          regexp_body = case
-          when regexp_opt.include?(:u)
-            regexp_body.encode(Encoding::UTF_8)
-          when regexp_opt.include?(:e)
-            regexp_body.encode(Encoding::EUC_JP)
-          when regexp_opt.include?(:s)
-            regexp_body.encode(Encoding::WINDOWS_31J)
-          when regexp_opt.include?(:n)
-            regexp_body.encode(Encoding::BINARY)
-          else
-            regexp_body
-          end
-        end
-
-        Regexp.new(regexp_body).names.each do |name|
+      if (regexp = static_regexp_node(receiver))
+        regexp.names.each do |name|
           @parser.static_env.declare(name)
         end
 
@@ -1031,7 +1016,7 @@ module Parser
           this_name == that_name
       else
         # Ignore everything beginning with underscore.
-        this_name[0] != '_' &&
+        this_name && this_name[0] != '_' &&
           this_name == that_name
       end
     end
@@ -1381,6 +1366,55 @@ module Parser
     #
     # HELPERS
     #
+
+    # Extract a static string from e.g. a regular expression,
+    # honoring the fact that MRI expands interpolations like #{""}
+    # at parse time.
+    def static_string(nodes)
+      nodes.map do |node|
+        case node.type
+        when :str
+          node.children[0]
+        when :begin
+          if (string = static_string(node.children))
+            string
+          else
+            return nil
+          end
+        else
+          return nil
+        end
+      end.join
+    end
+
+    def static_regexp(parts, options)
+      source = static_string(parts)
+      return nil if source.nil?
+
+      if defined?(Encoding)
+        source = case
+        when options.children.include?(:u)
+          source.encode(Encoding::UTF_8)
+        when options.children.include?(:e)
+          source.encode(Encoding::EUC_JP)
+        when options.children.include?(:s)
+          source.encode(Encoding::WINDOWS_31J)
+        when options.children.include?(:n)
+          source.encode(Encoding::BINARY)
+        else
+          source
+        end
+      end
+
+      Regexp.new(source)
+    end
+
+    def static_regexp_node(node)
+      if node.type == :regexp
+        parts, options = node.children[0..-2], node.children[-1]
+        static_regexp(parts, options)
+      end
+    end
 
     def collapse_string_parts?(parts)
       parts.one? &&

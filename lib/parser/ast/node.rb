@@ -27,6 +27,8 @@ module Parser
       #
       def assign_properties(properties)
         if (location = properties[:location])
+          location = location.dup if location.frozen?
+          location.node = self
           @location = location
         end
       end

@@ -360,6 +360,21 @@ class TestParser < Minitest::Test
         |~~~~~~~~~~~~~~ expression})
   end
 
+  def test_regex_error
+    # The tests work on 1.8, but with a different message.
+    assert_diagnoses(
+      [:error, :invalid_regexp, {:message => 'target of repeat operator is not specified: /?/'}],
+      %q[/?/],
+      %q(~~~ location),
+      ALL_VERSIONS - %w(1.8))
+
+    assert_diagnoses(
+      [:error, :invalid_regexp, {:message => 'target of repeat operator is not specified: /?/'}],
+      %q[/#{""}?/],
+      %q(~~~~~~~~ location),
+      ALL_VERSIONS - %w(1.8))
+  end
+
   # Arrays
 
   def test_array_plain
@@ -1980,6 +1995,13 @@ class TestParser < Minitest::Test
         s(:blockarg, :b)),
       %q{**baz, &b},
       ALL_VERSIONS - %w(1.8 1.9))
+
+    assert_parses_args(
+      s(:args,
+        s(:restarg),
+        s(:kwrestarg)),
+      %q{*, **},
+      ALL_VERSIONS - %w(1.8 1.9))
   end
 
   def test_kwarg_no_paren
@@ -3145,11 +3167,12 @@ class TestParser < Minitest::Test
     assert_parses(
       s(:send,
         s(:regexp,
-          s(:begin, s(:str, '(?<match>bar)')),
+          s(:begin, s(:int, 1)),
+          s(:str, '(?<match>bar)'),
           s(:regopt)),
         :=~,
         s(:str, 'bar')),
-      %q{/#{'(?<match>bar)'}/ =~ 'bar'})
+      %q{/#{1}(?<match>bar)/ =~ 'bar'})
   end
 
   # To superclass
