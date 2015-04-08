@@ -1,6 +1,6 @@
 # Parser
 
-[![Gem Version](https://badge.fury.io/rb/parser.png)](http://badge.fury.io/rb/parser)
+[![Gem Version](https://badge.fury.io/rb/parser.png)](https://badge.fury.io/rb/parser)
 [![Build Status](https://travis-ci.org/whitequark/parser.png?branch=master)](https://travis-ci.org/whitequark/parser)
 [![Code Climate](https://codeclimate.com/github/whitequark/parser.png)](https://codeclimate.com/github/whitequark/parser)
 [![Coverage Status](https://coveralls.io/repos/whitequark/parser/badge.png?branch=master)](https://coveralls.io/r/whitequark/parser)
@@ -41,7 +41,7 @@ Access the AST's source map:
     p Parser::CurrentRuby.parse("2 + 2").loc.selector.source
     # "+"
 
-Traverse the AST: see the documentation for [gem ast](http://whitequark.github.io/ast/).
+Traverse the AST: see the documentation for [gem ast](https://whitequark.github.io/ast/).
 
 Parse a chunk of code and display all diagnostics:
 
@@ -98,27 +98,26 @@ with Parser:
 * Precise source location reporting.
 * [Documented](doc/AST_FORMAT.md) AST format which is convenient to work with.
 * A simple interface and a powerful, tweakable one.
-* Parses 1.8, 1.9, 2.0, 2.1 and 2.2 (preliminary) syntax with backwards-compatible
+* Parses 1.8, 1.9, 2.0, 2.1 and 2.2 syntax with backwards-compatible
   AST formats.
 * [Rewriting][rewriting] support.
 * Parsing error recovery.
 * Improved [clang-like][] diagnostic messages with location information.
 * Written in pure Ruby, runs on MRI 1.8.7 or >=1.9.2, JRuby and Rubinius in 1.8
   and 1.9 mode.
-* Only two runtime dependencies: the gems [ast][] and [slop][].
+* Only one runtime dependency: the [ast][] gem.
 * [Insane][insane-lexer] Ruby lexer rewritten from scratch in Ragel.
 * 100% test coverage for Bison grammars (except error recovery).
 * Readable, commented source code.
 
 [clang-like]: http://clang.llvm.org/diagnostics.html
-[ast]: http://rubygems.org/gems/ast
-[slop]: http://rubygems.org/gems/slop
+[ast]: https://rubygems.org/gems/ast
 [insane-lexer]: http://whitequark.org/blog/2013/04/01/ruby-hacking-guide-ch-11-finite-state-lexer/
 [rewriting]: http://whitequark.org/blog/2013/04/26/lets-play-with-ruby-code/
 
 ## Documentation
 
-Documentation for parser is available [online](http://whitequark.github.io/parser/).
+Documentation for parser is available [online](https://whitequark.github.io/parser/).
 
 ### Node names
 
@@ -210,7 +209,7 @@ Adding support for the following Ruby MRI features in Parser would needlessly co
 
 Parser has been extensively tested; in particular, it parses almost entire [Rubygems][rg] corpus. For every issue, a breakdown of affected gems is offered.
 
- [rg]: http://rubygems.org
+ [rg]: https://rubygems.org
 
 ### Void value expressions
 
@@ -264,9 +263,9 @@ No known code is affected by this issue.
 ## Acknowledgements
 
 The lexer testsuite is derived from
-[ruby\_parser](http://github.com/seattlerb/ruby_parser).
+[ruby\_parser](https://github.com/seattlerb/ruby_parser).
 
-The Bison parser rules are derived from [Ruby MRI](http://github.com/ruby/ruby)
+The Bison parser rules are derived from [Ruby MRI](https://github.com/ruby/ruby)
 parse.y.
 
 ## Contributing

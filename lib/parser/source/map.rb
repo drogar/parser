@@ -56,20 +56,38 @@ module Parser
     #  #  @begin=#<Source::Range (string) 0...1>,
     #  #  @expression=#<Source::Range (string) 0...6>>
     #
+    # @!attribute [r] node
+    #  The node that is described by this map. Nodes and maps have 1:1 correspondence.
+    #  @return [Parser::AST::Node]
+    #
     # @!attribute [r] expression
     #  @return [Range]
     #
     # @api public
     #
     class Map
+      attr_reader :node
       attr_reader :expression
 
       ##
       # @param [Range] expression
       def initialize(expression)
         @expression = expression
+      end
 
+      ##
+      # @api private
+      def initialize_copy(other)
+        super
+        @node = nil
+      end
+
+      ##
+      # @api private
+      def node=(node)
+        @node = node
         freeze
+        @node
       end
 
       ##
@@ -134,7 +152,7 @@ module Parser
       protected
 
       def with(&block)
-        dup.tap(&block).freeze
+        dup.tap(&block)
       end
 
       def update_expression(expression_l)
