@@ -1,5 +1,4 @@
 # -*- encoding:utf-8; warn-indent:false -*-
-# -*- encoding:utf-8; warn-indent:false -*-
 
 # line 1 "lib/parser/lexer.rl"
 
