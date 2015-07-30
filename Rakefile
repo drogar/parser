@@ -81,7 +81,10 @@ task :changelog do
     end
   end
 
-  IO.popen("git log --pretty='#{format}' remotes/origin/2.0 remotes/origin/2.1 master", 'r') do |io|
+  branch = `git describe HEAD --all`.strip.gsub(/.+\/([^\/]+)$/, '\1')
+
+  IO.popen("git log --pretty='#{format}' " \
+           "remotes/origin/2.0 remotes/origin/2.1 remotes/origin/2.2 #{branch}", 'r') do |io|
     current_version = nil
 
     io.each_line do |line|
@@ -90,10 +93,13 @@ task :changelog do
       date = Date.parse(date)
 
       current_version = "#{$1} (#{date})" if version =~ /(v[\d\w.]+)/
-      current_version = "v#{Parser::VERSION} (#{date})" if version =~ /HEAD/
+      current_version = "v#{Parser::VERSION} (#{date})" \
+        if version =~ /(^| |\/)#{Regexp.escape branch}$/
 
-      next if current_version.nil? || message !~ /^[+*-]/
+      next if current_version.nil?
+      changelog[current_version] # add a hash
 
+      next if message !~ /^[+*-]/
       changelog[current_version][message[0]] << "#{message[1..-1]} (#{author})"
     end
   end

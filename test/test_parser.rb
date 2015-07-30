@@ -4938,6 +4938,18 @@ class TestParser < Minitest::Test
       ALL_VERSIONS - %w(1.8 1.9 2.0))
   end
 
+  def test_parser_bug_198
+    assert_parses(
+      s(:array,
+        s(:regexp,
+          s(:str, "()\\1"),
+          s(:regopt)),
+        s(:str, "#")),
+      %q{[/()\\1/, ?#]},
+      %q{},
+      ALL_VERSIONS - %w(1.8))
+  end
+
   def test_bug_lambda_leakage
     assert_parses(
       s(:begin,
@@ -4949,5 +4961,11 @@ class TestParser < Minitest::Test
       %q{->(scope) {}; scope},
       %q{},
       ALL_VERSIONS - %w(1.8))
+  end
+
+  def test_bug_regex_verification
+    assert_parses(
+      s(:regexp, s(:str, "#)"), s(:regopt, :x)),
+      %Q{/#)/x})
   end
 end

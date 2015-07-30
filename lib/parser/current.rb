@@ -3,6 +3,7 @@ module Parser
     def warn_syntax_deviation(feature, version)
       warn "warning: parser/current is loading #{feature}, which recognizes"
       warn "warning: #{version}-compliant syntax, but you are running #{RUBY_VERSION}."
+      warn "warning: please see https://github.com/whitequark/parser#compatibility-with-ruby-mri."
     end
     private :warn_syntax_deviation
   end
@@ -29,8 +30,8 @@ module Parser
     CurrentRuby = Ruby20
 
   when /^2\.1\./
-    if RUBY_VERSION != '2.1.5'
-      warn_syntax_deviation 'parser/ruby21', '2.1.5'
+    if RUBY_VERSION != '2.1.6'
+      warn_syntax_deviation 'parser/ruby21', '2.1.6'
     end
 
     require 'parser/ruby21'
