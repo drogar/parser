@@ -98,12 +98,30 @@ module Parser
         @expression.line
       end
 
+      alias_method :first_line, :line
+
       ##
       # A shortcut for `self.expression.column`.
       # @return [Integer]
       #
       def column
         @expression.column
+      end
+
+      ##
+      # A shortcut for `self.expression.last_line`.
+      # @return [Integer]
+      #
+      def last_line
+        @expression.last_line
+      end
+
+      ##
+      # A shortcut for `self.expression.last_column`.
+      # @return [Integer]
+      #
+      def last_column
+        @expression.last_column
       end
 
       ##
@@ -144,9 +162,11 @@ module Parser
       # @return [Hash(Symbol, Parser::Source::Range)]
       #
       def to_hash
-        Hash[instance_variables.map do |ivar|
-          [ ivar[1..-1].to_sym, instance_variable_get(ivar) ]
-        end]
+        instance_variables.inject({}) do |hash, ivar|
+          next hash if ivar.to_sym == :@node
+          hash[ivar[1..-1].to_sym] = instance_variable_get(ivar)
+          hash
+        end
       end
 
       protected

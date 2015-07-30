@@ -1,6 +1,77 @@
 Changelog
 =========
 
+v2.3.0.pre.2 (2015-06-15)
+-------------------------
+
+Bugs fixed:
+ * {macruby,rubymotion}.rb: add to gemspec. (whitequark)
+
+v2.3.0.pre.1 (2015-06-13)
+-------------------------
+
+API modifications:
+ * ruby20.y: revert 7f7f2a45. (whitequark)
+
+Features implemented:
+ * Add RubyMotion support. (whitequark)
+ * Add MacRuby support. (whitequark)
+
+Bugs fixed:
+ * lexer.rl: "[/()\\1/, ?#]": fixes #198. (whitequark)
+
+v2.2.2.5 (2015-05-25)
+---------------------
+
+API modifications:
+ * Source::Comment::Associator: rework entirely; fixes #194 (Oleg Zubchenko)
+
+Features implemented:
+ * Source::Map: add last_line, last_column delegation (Oleg Zubchenko)
+ * Source::Range: add last_line, last_column methods (Oleg Zubchenko)
+
+Bugs fixed:
+ * AST::Processor: add missing on_block_pass (fixes #196) (whitequark)
+
+v2.2.2.3 (2015-05-17)
+---------------------
+
+API modifications:
+ * lexer.rl: "a?? 1 : 0": squelch "invalid character syntax" warning. (whitequark)
+ * parser/current: bump warnings to 2.0.1, 2.1.7, 2.2.3. (whitequark)
+
+Bugs fixed:
+ * Source::Map: do not include :node in to_hash. (whitequark)
+ * ruby{20,21,22}.y: "p ->() do a() do end end": save cmdarg. (whitequark)
+
+v2.2.2.2 (2015-04-28)
+---------------------
+
+Bugs fixed:
+ * lexer.rl: "%r.\..", "%r'\''": leave regexp metacharacters escaped (fixes #192). (whitequark)
+
+v2.2.2.1 (2015-04-18)
+---------------------
+
+Bugs fixed:
+ * builders/default: don't falsely diagnose multiline regexps (fixes #190). (whitequark)
+
+v2.2.2.0 (2015-04-15)
+---------------------
+
+v2.2.0.4 (2015-04-15)
+---------------------
+
+Features implemented:
+ * Add Parser::Source::Map#node. (whitequark)
+ * Add Parser::Source::Comment.associate_locations. (kubicle)
+
+v2.2.0.3 (2015-02-13)
+---------------------
+
+v2.2.0.2 (2015-01-09)
+---------------------
+
 v2.2.0.1 (2014-12-27)
 ---------------------
 
@@ -192,6 +263,9 @@ Bugs fixed:
  * lexer.rl: "->*{}": tLAMBEG at expr_beg (fixes #103). (Peter Zotov)
  * Source::Rewriter: apply actions in the insertion order. (Josh Cheek)
 
+v2.0.0.pre6 (2013-08-02)
+------------------------
+
 v2.0.0.pre5 (2013-07-31)
 ------------------------
 
@@ -276,6 +350,9 @@ Features implemented:
 
 Bugs fixed:
  * Don't treat byte order mark as an identifier (closes #91). (Peter Zotov)
+
+v2.0.0.pre1 (2013-07-04)
+------------------------
 
 v2.0.0.beta10 (2013-07-02)
 --------------------------
@@ -481,6 +558,9 @@ Bugs fixed:
  * lexer.rl: parse "foo=1; foo / bar #/" as method call on 1.8, division on 1.9. (Peter Zotov)
  * ruby18.y, ruby19.y: BEGIN{} does not introduce a scope. (Peter Zotov)
  * lexer.rl: improve whitespace handling. (Peter Zotov)
+
+v0.9.1 (2013-04-15)
+-------------------
 
 v0.9.0 (2013-04-15)
 -------------------

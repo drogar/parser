@@ -865,9 +865,15 @@ class Parser::Lexer
         # or closing delimiter, it is an escape sequence for that
         # particular character. Write it without the backslash.
 
-        if literal.regexp? && escaped_char == '\\'
-          # Regular expressions should include backslashes in their escaped
-          # form.
+        if literal.regexp? && "\\$()*+.<>?[]^{|}".include?(escaped_char)
+          # Regular expressions should include escaped delimiters in their
+          # escaped form, except when the escaped character is
+          # a closing delimiter but not a regexp metacharacter.
+          #
+          # The backslash itself cannot be used as a closing delimiter
+          # at the same time as an escape symbol, but it is always munged,
+          # so this branch also executes for the non-closing-delimiter case
+          # for the backslash.
           literal.extend_string(tok, @ts, @te)
         else
           literal.extend_string(escaped_char, @ts, @te)
@@ -1395,8 +1401,17 @@ class Parser::Lexer
       # AMBIGUOUS TOKENS RESOLVED VIA EXPR_BEG
       #
 
-      # a ?b
-      # Character literal.
+      # a??
+      # Ternary operator
+      '?' c_space_nl
+      => {
+        # Unlike expr_beg as invoked in the next rule, do not warn
+        p = @ts - 1
+        fgoto expr_end;
+      };
+
+      # a ?b, a? ?
+      # Character literal or ternary operator
       w_space* '?'
       => { fhold; fgoto expr_beg; };
 
@@ -1679,7 +1694,7 @@ class Parser::Lexer
       #
 
       '?' ( e_bs escape
-          | c_any - c_space_nl - e_bs % { @escape = nil }
+          | (c_any - c_space_nl - e_bs) % { @escape = nil }
           )
       => {
         # Show an error if memorized.
