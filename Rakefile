@@ -23,7 +23,10 @@ GENERATED_FILES = %w(lib/parser/lexer.rb
                      lib/parser/ruby19.rb
                      lib/parser/ruby20.rb
                      lib/parser/ruby21.rb
-                     lib/parser/ruby22.rb)
+                     lib/parser/ruby22.rb
+                     lib/parser/ruby23.rb
+                     lib/parser/macruby.rb
+                     lib/parser/rubymotion.rb)
 
 CLEAN.include(GENERATED_FILES)
 
@@ -32,7 +35,7 @@ task :generate => GENERATED_FILES do
   Rake::Task[:ragel_check].invoke
   GENERATED_FILES.each do |filename|
     content = File.read(filename)
-    content = "# -*- encoding:utf-8; warn-indent:false -*-\n" + content
+    content = "# -*- encoding:utf-8; warn-indent:false; frozen_string_literal: true  -*-\n" + content
 
     File.open(filename, 'w') do |io|
       io.write content

@@ -540,6 +540,31 @@ Format:
  ~~~~~~~ expression
 ~~~
 
+### To attribute
+
+Format:
+
+~~~
+(send (self) :foo= (int 1))
+"self.foo = 1"
+     ^ dot
+      ~~~ selector
+          ^ operator
+ ~~~~~~~~~~~~ expression
+~~~
+
+### To attribute, using "safe navigation operator"
+
+Format:
+
+~~~
+(csend (self) :foo= (int 1))
+"self&.foo = 1"
+     ^^ dot
+       ~~~ selector
+           ^ operator
+ ~~~~~~~~~~~~~ expression
+~~~
 
 ### Multiple assignment
 
@@ -972,6 +997,65 @@ Format:
  ~~ expression
 ~~~
 
+### Objective-C arguments
+
+MacRuby includes a few more syntactic "arguments" whose name becomes
+the part of the Objective-C method name, despite looking like Ruby 2.0
+keyword arguments, and are thus treated differently.
+
+#### Objective-C label-like keyword argument
+
+Format:
+
+~~~
+(objc-kwarg :a :b)
+"a: b"
+ ~ keyword
+  ~ operator
+    ~ argument
+ ~~~~ expression
+~~~
+
+#### Objective-C pair-like keyword argument
+
+Format:
+
+~~~
+(objc-kwarg :a :b)
+"a => b"
+ ~ keyword
+   ~~ operator
+      ~ argument
+ ~~~~~~ expression
+~~~
+
+#### Objective-C keyword splat argument
+
+Format:
+
+~~~
+(objc-restarg (objc-kwarg :foo))
+"(*a: b)"
+   ~ objc-kwarg.keyword
+    ~ objc-kwarg.operator
+      ~ objc-kwarg.argument
+  ~ operator
+  ~~~~~ expression
+~~~
+
+Note that these splat arguments will only be parsed inside parentheses,
+e.g. in the following code:
+
+~~~
+def f((*a: b)); end
+~~~
+
+However, the following code results in a parse error:
+
+~~~
+def f(*a: b); end
+~~~
+
 ## Send
 
 ### To self
@@ -994,6 +1078,7 @@ Format:
 ~~~
 (send (lvar :foo) :bar (int 1))
 "foo.bar(1)"
+    ^ dot
      ~~~ selector
         ^ begin
           ^ end
@@ -1085,6 +1170,37 @@ Used when passing expression as block `foo(&bar)`
 "foo(1, &foo)"
         ^ operator
         ~~~~ expression
+~~~
+
+### "Stabby lambda"
+
+~~~
+(block (lambda) (args) nil)
+"-> {}"
+ ~~ lambda.expression
+~~~
+
+### "Safe navigation operator"
+
+~~~
+(csend (send nil :foo) :bar)
+"foo&.bar"
+    ~~ dot
+~~~
+
+### Objective-C variadic send
+
+MacRuby allows to pass a variadic amount of arguments via the last
+keyword "argument". Semantically, these, together with the pair value
+of the last pair in the hash implicitly passed as the last argument,
+form an array, which replaces the pair value. Despite that, the node
+is called `objc-varargs` to distinguish it from a literal array passed
+as a value.
+
+~~~
+(send nil :foo (int 1) (hash (pair (sym :bar) (objc-varargs (int 1) (int 2) (nil)))))
+"foo(1, bar: 2, 3, nil)"
+             ~~~~~~~~~ expression (array)
 ~~~
 
 ## Control flow

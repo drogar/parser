@@ -1,11 +1,60 @@
 Changelog
-=========
+
+v2.3.0.pre.4 (2015-11-26)
+-------------------------
+
+Bugs fixed:
+ * ruby23.y: add generated grammar to gemspec. (whitequark)
+
+v2.3.0.pre.3 (2015-11-25)
+-------------------------
+
+API modifications:
+ * builders/default: introduce a (lambda) node (fixes #212). (whitequark)
+ * lexer.rl: do not override argument variable. (Keiji, Yoshimi)
+ * lexer.rl: rename variable names from lit to current_literal. (Keiji, Yoshimi)
+ * lexer.rl: use Regexp to match string. (Keiji, Yoshimi)
+ * lib/parser/source/buffer: reduce respond_to?(:bsearch) (Keiji, Yoshimi)
+ * lexer.rl: reduce String literal allocations (Keiji, Yoshimi)
+ * lexer.rl: reduce respond_to?(:encode) method call on #advance (Keiji, Yoshimi)
+ * lexer.rl: reduce Stirng.length method call on #advance (Keiji, Yoshimi)
+ * lexer.rl: reduce .class method call on #advance (Keiji, Yoshimi)
+
+Features implemented:
+ * lexer.rl, ruby23.y: "a&.b": implement "safe navigation operator" (fixes #209). (whitequark)
+ * ruby23.y: fork grammar. (whitequark)
+
+Bugs fixed:
+ * lexer.rl: never let EOF token location point past EOF. (whitequark)
+
+v2.2.3.0 (2015-10-08)
+---------------------
+
+Bugs fixed:
+ * lexer.rl: "-> a: {}": state after -> is ENDFN, not END (fixes #203). (whitequark)
+ * ruby{21,22}.y: "p -> { :hello }, a: 1 do end": lexpop cmdarg. (whitequark)
 
 v2.2.2.6 (2015-06-30)
 ---------------------
 
 API modifications:
  * parser/current: link to README from syntax deviation warning. (whitequark)
+
+v2.3.0.pre.2 (2015-06-15)
+-------------------------
+
+Bugs fixed:
+ * {macruby,rubymotion}.rb: add to gemspec. (whitequark)
+
+v2.3.0.pre.1 (2015-06-13)
+-------------------------
+
+API modifications:
+ * ruby20.y: revert 7f7f2a45. (whitequark)
+
+Features implemented:
+ * Add RubyMotion support. (whitequark)
+ * Add MacRuby support. (whitequark)
 
 Bugs fixed:
  * lexer.rl: "[/()\\1/, ?#]": fixes #198. (whitequark)
@@ -28,9 +77,11 @@ v2.2.2.3 (2015-05-17)
 
 API modifications:
  * lexer.rl: "a?? 1 : 0": squelch "invalid character syntax" warning. (whitequark)
+ * parser/current: bump warnings to 2.0.1, 2.1.7, 2.2.3. (whitequark)
 
 Bugs fixed:
  * Source::Map: do not include :node in to_hash. (whitequark)
+ * ruby{20,21,22}.y: "p ->() do a() do end end": save cmdarg. (whitequark)
 
 v2.2.2.2 (2015-04-28)
 ---------------------

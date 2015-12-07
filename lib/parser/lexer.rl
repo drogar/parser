@@ -87,6 +87,13 @@ class Parser::Lexer
     'v' => "\v", '\\' => "\\"
   }
 
+  BLANK_STRING = ''.freeze
+  ESCAPED_NEXT_LINE = "\\\n".freeze
+  REGEXP_META_CHARACTERS = Regexp.union(*"\\$()*+.<>?[]^{|}".chars).freeze
+  UNDERSCORE_STRING = '_'.freeze
+
+  RBRACE_OR_RPAREN = %w"} ]".freeze
+
   attr_reader   :source_buffer
   attr_reader   :encoding
 
@@ -104,6 +111,8 @@ class Parser::Lexer
 
     @tokens     = nil
     @comments   = nil
+
+    @has_encode = ''.respond_to?(:encode)
 
     reset
   end
@@ -125,6 +134,7 @@ class Parser::Lexer
     @source        = nil # source string
     @source_pts    = nil # @source as a codepoint array
     @encoding      = nil # target encoding for output strings
+    @need_encode = nil
 
     @p             = 0   # stream position (saved manually in #advance)
     @ts            = nil # token start
@@ -180,18 +190,19 @@ class Parser::Lexer
 
         # This is a workaround for 1.9.2, which (without force_encoding)
         # would convert the result to UTF-8 (source encoding of lexer.rl).
-        @source    += "\0".force_encoding(@encoding)
+        @source    += "\0".dup.force_encoding(@encoding)
       else
         @source    += "\0"
       end
 
       if defined?(Encoding) && @source.encoding == Encoding::UTF_8
         @source_pts = @source.unpack('U*')
+        @need_encode = @has_encode && @encoding != Encoding::UTF_8
       else
         @source_pts = @source.unpack('C*')
       end
 
-      if (@source_pts.size > 1_000_000 && @source.respond_to?(:encode)) ||
+      if (@source_pts.size > 1_000_000 && @has_encode) ||
          @force_utf32
         # A heuristic: if the buffer is larger than 1M, then
         # store it in UTF-32 and convert the tokens as they're
@@ -205,6 +216,7 @@ class Parser::Lexer
         #
         # Patches accepted.
         @source = @source.encode(Encoding::UTF_32LE)
+        @need_encode = @has_encode && @encoding != Encoding::UTF_32LE
       end
 
       if @source_pts[0] == 0xfeff
@@ -270,20 +282,22 @@ class Parser::Lexer
     end
 
     # Ugly, but dependent on Ragel output. Consider refactoring it somehow.
-    _lex_trans_keys         = self.class.send :_lex_trans_keys
-    _lex_key_spans          = self.class.send :_lex_key_spans
-    _lex_index_offsets      = self.class.send :_lex_index_offsets
-    _lex_indicies           = self.class.send :_lex_indicies
-    _lex_trans_targs        = self.class.send :_lex_trans_targs
-    _lex_trans_actions      = self.class.send :_lex_trans_actions
-    _lex_to_state_actions   = self.class.send :_lex_to_state_actions
-    _lex_from_state_actions = self.class.send :_lex_from_state_actions
-    _lex_eof_trans          = self.class.send :_lex_eof_trans
+    klass = self.class
+    _lex_trans_keys         = klass.send :_lex_trans_keys
+    _lex_key_spans          = klass.send :_lex_key_spans
+    _lex_index_offsets      = klass.send :_lex_index_offsets
+    _lex_indicies           = klass.send :_lex_indicies
+    _lex_trans_targs        = klass.send :_lex_trans_targs
+    _lex_trans_actions      = klass.send :_lex_trans_actions
+    _lex_to_state_actions   = klass.send :_lex_to_state_actions
+    _lex_from_state_actions = klass.send :_lex_from_state_actions
+    _lex_eof_trans          = klass.send :_lex_eof_trans
 
-    p, pe, eof = @p, @source.length + 1, @source.length + 1
+    pe = @source.length + 1
+    p, eof = @p, pe
 
-    @command_state = (@cs == self.class.lex_en_expr_value ||
-                      @cs == self.class.lex_en_line_begin)
+    @command_state = (@cs == klass.lex_en_expr_value ||
+                      @cs == klass.lex_en_line_begin)
 
     %% write exec;
     # %
@@ -292,10 +306,11 @@ class Parser::Lexer
 
     if @token_queue.any?
       @token_queue.shift
-    elsif @cs == self.class.lex_error
+    elsif @cs == klass.lex_error
       [ false, [ '$error', range(p - 1, p) ] ]
     else
-      [ false, [ '$eof',   range(p, p)     ] ]
+      eof = @source.length
+      [ false, [ '$eof',   range(eof, eof) ] ]
     end
   end
 
@@ -320,7 +335,9 @@ class Parser::Lexer
     end
 
     def tok(s = @ts, e = @te)
-      @source[s...e].encode(@encoding)
+      source = @source[s...e]
+      return source unless @need_encode
+      source.encode(@encoding)
     end
   else
     def encode_escape(ord)
@@ -444,7 +461,7 @@ class Parser::Lexer
     '=>'  => :tASSOC,   '::'  => :tCOLON2,  '===' => :tEQQ,
     '<=>' => :tCMP,     '[]'  => :tAREF,    '[]=' => :tASET,
     '{'   => :tLCURLY,  '}'   => :tRCURLY,  '`'   => :tBACK_REF2,
-    '!@'  => :tBANG,
+    '!@'  => :tBANG,    '&.'  => :tANDDOT,
   }
 
   PUNCTUATION_BEGIN = {
@@ -828,15 +845,16 @@ class Parser::Lexer
 
   action extend_string {
     string = @source[@ts...@te]
-    string = string.encode(@encoding) if string.respond_to?(:encode)
+    string = string.encode(@encoding) if @need_encode
 
     # tLABEL_END is only possible in non-cond context on >= 2.2
     if @version >= 22 && !@cond.active?
       lookahead = @source[@te...@te+2]
-      lookahead = lookahead.encode(@encoding) if lookahead.respond_to?(:encode)
+      lookahead = lookahead.encode(@encoding) if @need_encode
     end
 
-    if !literal.heredoc? && (token = literal.nest_and_try_closing(string, @ts, @te, lookahead))
+    current_literal = literal
+    if !current_literal.heredoc? && (token = current_literal.nest_and_try_closing(string, @ts, @te, lookahead))
       if token[0] == :tLABEL_END
         p += 1
         pop_literal
@@ -844,14 +862,15 @@ class Parser::Lexer
       else
         fnext *pop_literal;
       end
-       fbreak;
+      fbreak;
     else
-      literal.extend_string(string, @ts, @te)
+      current_literal.extend_string(string, @ts, @te)
     end
   }
 
   action extend_string_escaped {
-    if literal.nest_and_try_closing('\\', @ts, @ts + 1)
+    current_literal = literal
+    if current_literal.nest_and_try_closing('\\', @ts, @ts + 1)
       # If the literal is actually closed by the backslash,
       # rewind the input prior to consuming the escape sequence.
       p = @escape_s - 1
@@ -860,12 +879,12 @@ class Parser::Lexer
       # Get the first character after the backslash.
       escaped_char = @source[@escape_s].chr
 
-      if literal.munge_escape? escaped_char
+      if current_literal.munge_escape? escaped_char
         # If this particular literal uses this character as an opening
         # or closing delimiter, it is an escape sequence for that
         # particular character. Write it without the backslash.
 
-        if literal.regexp? && "\\$()*+.<>?[]^{|}".include?(escaped_char)
+        if current_literal.regexp? && REGEXP_META_CHARACTERS.match(escaped_char)
           # Regular expressions should include escaped delimiters in their
           # escaped form, except when the escaped character is
           # a closing delimiter but not a regexp metacharacter.
@@ -874,9 +893,9 @@ class Parser::Lexer
           # at the same time as an escape symbol, but it is always munged,
           # so this branch also executes for the non-closing-delimiter case
           # for the backslash.
-          literal.extend_string(tok, @ts, @te)
+          current_literal.extend_string(tok, @ts, @te)
         else
-          literal.extend_string(escaped_char, @ts, @te)
+          current_literal.extend_string(escaped_char, @ts, @te)
         end
       else
         # It does not. So this is an actual escape sequence, yay!
@@ -891,12 +910,12 @@ class Parser::Lexer
 
         @escape.call if @escape.respond_to? :call
 
-        if literal.regexp?
+        if current_literal.regexp?
           # Regular expressions should include escape sequences in their
           # escaped form. On the other hand, escaped newlines are removed.
-          literal.extend_string(tok.gsub("\\\n", ''), @ts, @te)
+          current_literal.extend_string(tok.gsub(ESCAPED_NEXT_LINE, BLANK_STRING), @ts, @te)
         else
-          literal.extend_string(@escape || tok, @ts, @te)
+          current_literal.extend_string(@escape || tok, @ts, @te)
         end
       end
     end
@@ -906,27 +925,28 @@ class Parser::Lexer
   # As heredoc closing line can immediately precede EOF, this action
   # has to handle such case specially.
   action extend_string_eol {
+    current_literal = literal
     if @te == pe
       diagnostic :fatal, :string_eof, nil,
-                 range(literal.str_s, literal.str_s + 1)
+                 range(current_literal.str_s, current_literal.str_s + 1)
     end
 
-    if literal.heredoc?
-      line = tok(@herebody_s, @ts).gsub(/\r+$/, '')
+    if current_literal.heredoc?
+      line = tok(@herebody_s, @ts).gsub(/\r+$/, BLANK_STRING)
 
       if version?(18, 19, 20)
         # See ruby:c48b4209c
-        line = line.gsub(/\r.*$/, '')
+        line = line.gsub(/\r.*$/, BLANK_STRING)
       end
 
       # Try ending the heredoc with the complete most recently
       # scanned line. @herebody_s always refers to the start of such line.
-      if literal.nest_and_try_closing(line, @herebody_s, @ts)
+      if current_literal.nest_and_try_closing(line, @herebody_s, @ts)
         # Adjust @herebody_s to point to the next line.
         @herebody_s = @te
 
         # Continue regular lexing after the heredoc reference (<<END).
-        p = literal.heredoc_e - 1
+        p = current_literal.heredoc_e - 1
         fnext *pop_literal; fbreak;
       else
         # Ditto.
@@ -934,7 +954,7 @@ class Parser::Lexer
       end
     else
       # Try ending the literal with a newline.
-      if literal.nest_and_try_closing(tok, @ts, @te)
+      if current_literal.nest_and_try_closing(tok, @ts, @te)
         fnext *pop_literal; fbreak;
       end
 
@@ -952,14 +972,14 @@ class Parser::Lexer
       end
     end
 
-    if literal.words? && !eof_codepoint?(@source_pts[p])
-      literal.extend_space @ts, @te
+    if current_literal.words? && !eof_codepoint?(@source_pts[p])
+      current_literal.extend_space @ts, @te
     else
       # A literal newline is appended if the heredoc was _not_ closed
       # this time (see fbreak above). See also Literal#nest_and_try_closing
       # for rationale of calling #flush_string here.
-      literal.extend_string tok, @ts, @te
-      literal.flush_string
+      current_literal.extend_string tok, @ts, @te
+      current_literal.flush_string
     end
   }
 
@@ -977,8 +997,9 @@ class Parser::Lexer
   interp_var = '#' ( global_var | class_var_v | instance_var_v );
 
   action extend_interp_var {
-    literal.flush_string
-    literal.extend_content
+    current_literal = literal
+    current_literal.flush_string
+    current_literal.extend_content
 
     emit(:tSTRING_DVAR, nil, @ts, @ts + 1)
 
@@ -1003,22 +1024,24 @@ class Parser::Lexer
   e_lbrace = '{' % {
     @cond.push(false); @cmdarg.push(false)
 
-    if literal
-      literal.start_interp_brace
+    current_literal = literal
+    if current_literal
+      current_literal.start_interp_brace
     end
   };
 
   e_rbrace = '}' % {
-    if literal
-      if literal.end_interp_brace_and_try_closing
+    current_literal = literal
+    if current_literal
+      if current_literal.end_interp_brace_and_try_closing
         if version?(18, 19)
           emit(:tRCURLY, '}', p - 1, p)
         else
           emit(:tSTRING_DEND, '}', p - 1, p)
         end
 
-        if literal.saved_herebody_s
-          @herebody_s = literal.saved_herebody_s
+        if current_literal.saved_herebody_s
+          @herebody_s = current_literal.saved_herebody_s
         end
 
         fhold;
@@ -1029,17 +1052,18 @@ class Parser::Lexer
   };
 
   action extend_interp_code {
-    literal.flush_string
-    literal.extend_content
+    current_literal = literal
+    current_literal.flush_string
+    current_literal.extend_content
 
     emit(:tSTRING_DBEG, '#{')
 
-    if literal.heredoc?
-      literal.saved_herebody_s = @herebody_s
+    if current_literal.heredoc?
+      current_literal.saved_herebody_s = @herebody_s
       @herebody_s = nil
     end
 
-    literal.start_interp_brace
+    current_literal.start_interp_brace
     fcall expr_value;
   }
 
@@ -1891,7 +1915,7 @@ class Parser::Lexer
         emit_table(PUNCTUATION, @ts, @ts + 2)
 
         @lambda_stack.push @paren_nest
-        fbreak;
+        fnext expr_endfn; fbreak;
       };
 
       e_lbrace | 'do'
@@ -1987,8 +2011,8 @@ class Parser::Lexer
       => {
         digits = tok(@num_digits_s, @num_suffix_s)
 
-        if digits.end_with? '_'
-          diagnostic :error, :trailing_in_number, { :character => '_' },
+        if digits.end_with? UNDERSCORE_STRING
+          diagnostic :error, :trailing_in_number, { :character => UNDERSCORE_STRING },
                      range(@te - 1, @te)
         elsif digits.empty? && @num_base == 8 && version?(18)
           # 1.8 did not raise an error on 0o.
@@ -2085,7 +2109,7 @@ class Parser::Lexer
       # METHOD CALLS
       #
 
-      '.' | '::'
+      '.' | '&.' | '::'
       => { emit_table(PUNCTUATION)
            fnext expr_dot; fbreak; };
 
@@ -2121,7 +2145,7 @@ class Parser::Lexer
         emit_table(PUNCTUATION)
         @cond.lexpop; @cmdarg.lexpop
 
-        if %w"} ]".include?(tok)
+        if RBRACE_OR_RPAREN.include?(tok)
           fnext expr_endarg;
         else # )
           # fnext expr_endfn; ?
@@ -2176,9 +2200,8 @@ class Parser::Lexer
       # Insane leading dots:
       # a #comment
       #  .b: a.b
-      c_space* '.' ( c_any - '.' )
-      => { fhold; fhold;
-           fgoto expr_end; };
+      c_space* %{ tm = p } ('.' | '&.')
+      => { p = tm - 1; fgoto expr_end; };
 
       any
       => { emit(:tNL, nil, @newline_s, @newline_s + 1)

@@ -4,6 +4,32 @@ module Parser
   # Default AST builder. Uses {AST::Node}s.
   #
   class Builders::Default
+    class << self
+      ##
+      # AST compatibility attribute; since `-> {}` is not semantically
+      # equivalent to `lambda {}`, all new code should set this attribute
+      # to true.
+      #
+      # If set to false (the default), `-> {}` is emitted as
+      # `s(:block, s(:send, nil, :lambda), s(:args), nil)`.
+      #
+      # If set to true, `-> {}` is emitted as
+      # `s(:block, s(:lambda), s(:args), nil)`.
+      #
+      # @return [Boolean]
+      attr_accessor :emit_lambda
+    end
+
+    @emit_lambda = false
+
+    class << self
+      ##
+      # @api private
+      def modernize
+        @emit_lambda = true
+      end
+    end
+
     ##
     # @api private
     attr_accessor :parser
@@ -618,24 +644,73 @@ module Parser
       end
     end
 
+    # MacRuby Objective-C arguments
+
+    def objc_kwarg(kwname_t, assoc_t, name_t)
+      kwname_l = loc(kwname_t)
+      if assoc_t.nil? # a: b, not a => b
+        kwname_l   = kwname_l.resize(kwname_l.size - 1)
+        operator_l = kwname_l.end.resize(1)
+      else
+        operator_l = loc(assoc_t)
+      end
+
+      n(:objc_kwarg, [ value(kwname_t).to_sym, value(name_t).to_sym ],
+        Source::Map::ObjcKwarg.new(kwname_l, operator_l, loc(name_t),
+                                   kwname_l.join(loc(name_t))))
+    end
+
+    def objc_restarg(star_t, name=nil)
+      if name.nil?
+        n0(:restarg, arg_prefix_map(star_t))
+      elsif name.type == :arg # regular restarg
+        name.updated(:restarg, nil,
+          { :location => name.loc.with_operator(loc(star_t)) })
+      else # restarg with objc_kwarg inside
+        n(:objc_restarg, [ name ],
+          unary_op_map(star_t, name))
+      end
+    end
+
     #
     # Method calls
     #
 
+    def call_type_for_dot(dot_t)
+      if !dot_t.nil? && value(dot_t) == :anddot
+        :csend
+      else
+        # This case is a bit tricky. ruby23.y returns the token tDOT with
+        # the value :dot, and the token :tANDDOT with the value :anddot.
+        #
+        # But, ruby{18..22}.y (which unconditionally expect tDOT) just
+        # return "." there, since they are to be kept close to the corresponding
+        # Ruby MRI grammars.
+        #
+        # Thankfully, we don't have to care.
+        :send
+      end
+    end
+
     def call_method(receiver, dot_t, selector_t,
                     lparen_t=nil, args=[], rparen_t=nil)
+      type = call_type_for_dot(dot_t)
       if selector_t.nil?
-        n(:send, [ receiver, :call, *args ],
+        n(type, [ receiver, :call, *args ],
           send_map(receiver, dot_t, nil, lparen_t, args, rparen_t))
       else
-        n(:send, [ receiver, value(selector_t).to_sym, *args ],
+        n(type, [ receiver, value(selector_t).to_sym, *args ],
           send_map(receiver, dot_t, selector_t, lparen_t, args, rparen_t))
       end
     end
 
     def call_lambda(lambda_t)
-      n(:send, [ nil, :lambda ],
-        send_map(nil, nil, lambda_t))
+      if self.class.emit_lambda
+        n0(:lambda, expr_map(loc(lambda_t)))
+      else
+        n(:send, [ nil, :lambda ],
+          send_map(nil, nil, lambda_t))
+      end
     end
 
     def block(method_call, begin_t, args, body, end_t)
@@ -650,7 +725,7 @@ module Parser
         diagnostic :error, :block_and_blockarg, nil, last_arg.loc.expression, [loc(begin_t)]
       end
 
-      if [:send, :super, :zsuper].include?(method_call.type)
+      if [:send, :super, :zsuper, :lambda].include?(method_call.type)
         n(:block, [ method_call, args, body ],
           block_map(method_call.loc.expression, begin_t, end_t))
       else
@@ -671,11 +746,21 @@ module Parser
         unary_op_map(amper_t, arg))
     end
 
+    def objc_varargs(pair, rest_of_varargs)
+      value, first_vararg = *pair
+      vararg_array = array(nil, [ first_vararg, *rest_of_varargs ], nil).
+        updated(:objc_varargs)
+      pair.updated(nil, [ value, vararg_array ],
+        { :location => pair.loc.with_expression(
+              pair.loc.expression.join(vararg_array.loc.expression)) })
+    end
+
     def attr_asgn(receiver, dot_t, selector_t)
       method_name = (value(selector_t) + '=').to_sym
+      type = call_type_for_dot(dot_t)
 
       # Incomplete method call.
-      n(:send, [ receiver, method_name ],
+      n(type, [ receiver, method_name ],
         send_map(receiver, dot_t, selector_t))
     end
 

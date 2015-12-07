@@ -5,7 +5,7 @@ require File.expand_path('../lib/parser/version', __FILE__)
 Gem::Specification.new do |spec|
   spec.name          = 'parser'
   spec.version       = Parser::VERSION
-  spec.authors       = ['Peter Zotov']
+  spec.authors       = ['whitequark']
   spec.email         = ['whitequark@whitequark.org']
   spec.description   = 'A Ruby parser written in pure Ruby.'
   spec.summary       = spec.description
@@ -20,6 +20,9 @@ Gem::Specification.new do |spec|
                           lib/parser/ruby20.rb
                           lib/parser/ruby21.rb
                           lib/parser/ruby22.rb
+                          lib/parser/ruby23.rb
+                          lib/parser/macruby.rb
+                          lib/parser/rubymotion.rb
                        )
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^test/})
@@ -29,7 +32,7 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency 'bundler',   '~> 1.2'
   spec.add_development_dependency 'rake',      '~> 10.0'
-  spec.add_development_dependency 'racc',      '= 1.4.9' # update to 1.4.11 when it's done
+  spec.add_development_dependency 'racc',      '= 1.4.14'
   spec.add_development_dependency 'cliver',    '~> 0.3.0'
 
   spec.add_development_dependency 'yard'
