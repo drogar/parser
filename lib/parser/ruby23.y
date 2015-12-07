@@ -2348,7 +2348,11 @@ end
 
 ---- header
 
-require 'parser'
+if Kernel.respond_to? :require_relative
+  require_relative './../parser'
+else
+  require 'parser'
+end
 
 Parser.check_for_encoding_support
 
