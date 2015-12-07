@@ -1,4 +1,4 @@
-class Parser::MacRuby
+class Parser::Ruby23
 
 token kCLASS kMODULE kDEF kUNDEF kBEGIN kRESCUE kENSURE kEND kIF kUNLESS
       kTHEN kELSIF kELSE kCASE kWHEN kWHILE kUNTIL kFOR kBREAK kNEXT
@@ -12,11 +12,12 @@ token kCLASS kMODULE kDEF kUNDEF kBEGIN kRESCUE kENSURE kEND kIF kUNLESS
       tASET tLSHFT tRSHFT tCOLON2 tCOLON3 tOP_ASGN tASSOC tLPAREN
       tLPAREN2 tRPAREN tLPAREN_ARG tLBRACK tLBRACK2 tRBRACK tLBRACE
       tLBRACE_ARG tSTAR tSTAR2 tAMPER tAMPER2 tTILDE tPERCENT tDIVIDE
-      tPLUS tMINUS tLT tGT tPIPE tBANG tCARET tLCURLY tRCURLY
+      tDSTAR tPLUS tMINUS tLT tGT tPIPE tBANG tCARET tLCURLY tRCURLY
       tBACK_REF2 tSYMBEG tSTRING_BEG tXSTRING_BEG tREGEXP_BEG tREGEXP_OPT
-      tWORDS_BEG tQWORDS_BEG tSTRING_DBEG tSTRING_DVAR tSTRING_END
-      tSTRING tSYMBOL tNL tEH tCOLON tCOMMA tSPACE tSEMI tLAMBDA tLAMBEG
-      tCHARACTER
+      tWORDS_BEG tQWORDS_BEG tSYMBOLS_BEG tQSYMBOLS_BEG tSTRING_DBEG
+      tSTRING_DVAR tSTRING_END tSTRING_DEND tSTRING tSYMBOL
+      tNL tEH tCOLON tCOMMA tSPACE tSEMI tLAMBDA tLAMBEG tCHARACTER
+      tRATIONAL tIMAGINARY tLABEL_END tANDDOT
 
 prechigh
   right    tBANG tTILDE tUPLUS
@@ -100,17 +101,23 @@ rule
                     {
                       result = []
                     }
-                | stmt
+                | stmt_or_begin
                     {
                       result = [ val[0] ]
                     }
-                | stmts terms stmt
+                | stmts terms stmt_or_begin
                     {
                       result = val[0] << val[2]
                     }
                 | error stmt
                     {
                       result = [ val[1] ]
+                    }
+
+   stmt_or_begin: stmt
+                | klBEGIN tLCURLY top_compstmt tRCURLY
+                    {
+                      diagnostic :error, :begin_in_method, nil, val[0]
                     }
 
             stmt: kALIAS fitem
@@ -171,10 +178,7 @@ rule
                     {
                       result = @builder.postexe(val[0], val[1], val[2], val[3])
                     }
-                | lhs tEQL command_call
-                    {
-                      result = @builder.assign(val[0], val[1], val[2])
-                    }
+                | command_asgn
                 | mlhs tEQL command_call
                     {
                       result = @builder.multi_assign(val[0], val[1], val[2])
@@ -190,14 +194,14 @@ rule
                                     val[0], val[1], val[2], val[3]),
                                   val[4], val[5])
                     }
-                | primary_value tDOT tIDENTIFIER tOP_ASGN command_call
+                | primary_value call_op tIDENTIFIER tOP_ASGN command_call
                     {
                       result = @builder.op_assign(
                                   @builder.call_method(
                                     val[0], val[1], val[2]),
                                   val[3], val[4])
                     }
-                | primary_value tDOT tCONSTANT tOP_ASGN command_call
+                | primary_value call_op tCONSTANT tOP_ASGN command_call
                     {
                       result = @builder.op_assign(
                                   @builder.call_method(
@@ -227,16 +231,20 @@ rule
                       result = @builder.assign(val[0], val[1],
                                   @builder.array(nil, val[2], nil))
                     }
-                | mlhs tEQL arg_value
+                | mlhs tEQL mrhs_arg
                     {
                       result = @builder.multi_assign(val[0], val[1], val[2])
                     }
-                | mlhs tEQL mrhs
-                    {
-                      result = @builder.multi_assign(val[0], val[1],
-                                  @builder.array(nil, val[2], nil))
-                    }
                 | expr
+
+    command_asgn: lhs tEQL command_call
+                    {
+                      result = @builder.assign(val[0], val[1], val[2])
+                    }
+                | lhs tEQL command_asgn
+                    {
+                      result = @builder.assign(val[0], val[1], val[2])
+                    }
 
             expr: command_call
                 | expr kAND expr
@@ -263,15 +271,10 @@ rule
                 | block_command
 
    block_command: block_call
-                | block_call tDOT operation2 command_args
+                | block_call dot_or_colon operation2 command_args
                     {
                       result = @builder.call_method(val[0], val[1], val[2],
-                                  *val[3])
-                    }
-                | block_call tCOLON2 operation2 command_args
-                    {
-                      result = @builder.call_method(val[0], val[1], val[2],
-                                  *val[3])
+                                  nil, val[3], nil)
                     }
 
  cmd_brace_block: tLBRACE_ARG
@@ -285,29 +288,31 @@ rule
                       @static_env.unextend
                     }
 
-         command: operation command_args =tLOWEST
+           fcall: operation
+
+         command: fcall command_args =tLOWEST
                     {
                       result = @builder.call_method(nil, nil, val[0],
-                                  *val[1])
+                                  nil, val[1], nil)
                     }
-                | operation command_args cmd_brace_block
+                | fcall command_args cmd_brace_block
                     {
                       method_call = @builder.call_method(nil, nil, val[0],
-                                        *val[1])
+                                        nil, val[1], nil)
 
                       begin_t, args, body, end_t = val[2]
                       result      = @builder.block(method_call,
                                       begin_t, args, body, end_t)
                     }
-                | primary_value tDOT operation2 command_args =tLOWEST
+                | primary_value call_op operation2 command_args =tLOWEST
                     {
                       result = @builder.call_method(val[0], val[1], val[2],
-                                  *val[3])
+                                  nil, val[3], nil)
                     }
-                | primary_value tDOT operation2 command_args cmd_brace_block
+                | primary_value call_op operation2 command_args cmd_brace_block
                     {
                       method_call = @builder.call_method(val[0], val[1], val[2],
-                                        *val[3])
+                                        nil, val[3], nil)
 
                       begin_t, args, body, end_t = val[4]
                       result      = @builder.block(method_call,
@@ -316,12 +321,12 @@ rule
                 | primary_value tCOLON2 operation2 command_args =tLOWEST
                     {
                       result = @builder.call_method(val[0], val[1], val[2],
-                                  *val[3])
+                                  nil, val[3], nil)
                     }
                 | primary_value tCOLON2 operation2 command_args cmd_brace_block
                     {
                       method_call = @builder.call_method(val[0], val[1], val[2],
-                                        *val[3])
+                                        nil, val[3], nil)
 
                       begin_t, args, body, end_t = val[4]
                       result      = @builder.block(method_call,
@@ -330,12 +335,12 @@ rule
                 | kSUPER command_args
                     {
                       result = @builder.keyword_cmd(:super, val[0],
-                                  *val[1])
+                                  nil, val[1], nil)
                     }
                 | kYIELD command_args
                     {
                       result = @builder.keyword_cmd(:yield, val[0],
-                                  *val[1])
+                                  nil, val[1], nil)
                     }
                 | kRETURN call_args
                     {
@@ -442,7 +447,11 @@ rule
                       result = val[0] << val[2]
                     }
 
-       mlhs_node: variable
+       mlhs_node: user_variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+                | keyword_variable
                     {
                       result = @builder.assignable(val[0])
                     }
@@ -450,7 +459,7 @@ rule
                     {
                       result = @builder.index_asgn(val[0], val[1], val[2], val[3])
                     }
-                | primary_value tDOT tIDENTIFIER
+                | primary_value call_op tIDENTIFIER
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
@@ -458,7 +467,7 @@ rule
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
-                | primary_value tDOT tCONSTANT
+                | primary_value call_op tCONSTANT
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
@@ -477,7 +486,11 @@ rule
                       result = @builder.assignable(val[0])
                     }
 
-             lhs: variable
+             lhs: user_variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+                | keyword_variable
                     {
                       result = @builder.assignable(val[0])
                     }
@@ -485,7 +498,7 @@ rule
                     {
                       result = @builder.index_asgn(val[0], val[1], val[2], val[3])
                     }
-                | primary_value tDOT tIDENTIFIER
+                | primary_value call_op tIDENTIFIER
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
@@ -493,7 +506,7 @@ rule
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
-                | primary_value tDOT tCONSTANT
+                | primary_value call_op tCONSTANT
                     {
                       result = @builder.attr_asgn(val[0], val[1], val[2])
                     }
@@ -561,7 +574,7 @@ rule
                 |   tMATCH   | tNMATCH | tGT      | tGEQ  | tLT     | tLEQ
                 |   tNEQ     | tLSHFT  | tRSHFT   | tPLUS | tMINUS  | tSTAR2
                 |   tSTAR    | tDIVIDE | tPERCENT | tPOW  | tBANG   | tTILDE
-                |   tUPLUS   | tUMINUS | tAREF    | tASET | tBACK_REF2
+                |   tUPLUS   | tUMINUS | tAREF    | tASET | tDSTAR  | tBACK_REF2
 
         reswords: k__LINE__ | k__FILE__ | k__ENCODING__ | klBEGIN | klEND
                 | kALIAS    | kAND      | kBEGIN        | kBREAK  | kCASE
@@ -608,14 +621,14 @@ rule
                                     val[0], val[1], val[2], val[3]),
                                   val[4], val[5])
                     }
-                | primary_value tDOT tIDENTIFIER tOP_ASGN arg
+                | primary_value call_op tIDENTIFIER tOP_ASGN arg
                     {
                       result = @builder.op_assign(
                                   @builder.call_method(
                                     val[0], val[1], val[2]),
                                   val[3], val[4])
                     }
-                | primary_value tDOT tCONSTANT tOP_ASGN arg
+                | primary_value call_op tCONSTANT tOP_ASGN arg
                     {
                       result = @builder.op_assign(
                                   @builder.call_method(
@@ -631,11 +644,15 @@ rule
                     }
                 | primary_value tCOLON2 tCONSTANT tOP_ASGN arg
                     {
-                      diagnostic :error, :dynamic_const, nil, val[2], [ val[3] ]
+                      const  = @builder.const_op_assignable(
+                                  @builder.const_fetch(val[0], val[1], val[2]))
+                      result = @builder.op_assign(const, val[3], val[4])
                     }
                 | tCOLON3 tCONSTANT tOP_ASGN arg
                     {
-                      diagnostic :error, :dynamic_const, nil, val[1], [ val[2] ]
+                      const  = @builder.const_op_assignable(
+                                  @builder.const_global(val[0], val[1]))
+                      result = @builder.op_assign(const, val[2], val[3])
                     }
                 | backref tOP_ASGN arg
                     {
@@ -673,19 +690,11 @@ rule
                     {
                       result = @builder.binary_op(val[0], val[1], val[2])
                     }
-                | tUMINUS_NUM tINTEGER tPOW arg
+                | tUMINUS_NUM simple_numeric tPOW arg
                     {
                       result = @builder.unary_op(val[0],
                                   @builder.binary_op(
-                                    @builder.integer(val[1]),
-                                      val[2], val[3]))
-                    }
-                | tUMINUS_NUM tFLOAT tPOW arg
-                    {
-                      result = @builder.unary_op(val[0],
-                                  @builder.binary_op(
-                                    @builder.float(val[1]),
-                                      val[2], val[3]))
+                                    val[1], val[2], val[3]))
                     }
                 | tUPLUS arg
                     {
@@ -776,10 +785,24 @@ rule
                       result = @builder.keyword_cmd(:defined?, val[0], nil, [ val[2] ], nil)
                     }
 
-                | arg tEH arg opt_nl tCOLON arg
+                # Note: MRI eventually came to rely on disambiguation based on
+                # the lexer state, but it is too contrived with the Ragel lexer,
+                # so we kept this approach. See ruby/ruby@b0c03f63e5 for
+                # the initial commit, and ruby/ruby@23352f62a for MRI revert,
+                # which we decided not to track.
+                | arg tEH
+                    {
+                      @lexer.push_cond
+                      @lexer.cond.push(true)
+                    }
+                  arg opt_nl tCOLON
+                    {
+                      @lexer.pop_cond
+                    }
+                  arg
                     {
                       result = @builder.ternary(val[0], val[1],
-                                                val[2], val[4], val[5])
+                                                val[3], val[5], val[7])
                     }
                 | primary
 
@@ -812,6 +835,15 @@ rule
                       result = []
                     }
                 | call_args
+                | args tCOMMA
+                | args tCOMMA assocs tCOMMA
+                    {
+                      result = val[0] << @builder.associate(nil, val[2], nil)
+                    }
+                | assocs tCOMMA
+                    {
+                      result = [ @builder.associate(nil, val[0], nil) ]
+                    }
 
        call_args: command
                     {
@@ -832,79 +864,20 @@ rule
                       result = val[0] << assocs
                       result.concat(val[3])
                     }
-                | args tCOMMA assocs tCOMMA args opt_block_arg
-                    {
-                      val[2][-1] = @builder.objc_varargs(val[2][-1], val[4])
-                      assocs = @builder.associate(nil, val[2], nil)
-                      result = val[0] << assocs
-                      result.concat(val[5])
-                    }
                 | block_arg
                     {
                       result =  [ val[0] ]
-                    }
-
-      call_args2: arg_value tCOMMA args opt_block_arg
-                    {
-                      result = [ val[0], *val[2].concat(val[3]) ]
-                    }
-                | arg_value tCOMMA block_arg
-                    {
-                      result = [ val[0], val[2] ]
-                    }
-                | assocs opt_block_arg
-                    {
-                      result =  [ @builder.associate(nil, val[0], nil),
-                                  *val[1] ]
-                    }
-                | arg_value tCOMMA assocs opt_block_arg
-                    {
-                      result =  [ val[0],
-                                  @builder.associate(nil, val[2], nil),
-                                  *val[3] ]
-                    }
-                | arg_value tCOMMA args tCOMMA assocs opt_block_arg
-                    {
-                      result =  [ val[0],
-                                  *val[2].
-                                    push(@builder.associate(nil, val[4], nil)).
-                                    concat(val[5]) ]
-                    }
-                | block_arg
-                    {
-                      result = [ val[0] ]
                     }
 
     command_args:   {
                       result = @lexer.cmdarg.dup
                       @lexer.cmdarg.push(true)
                     }
-                    open_args
+                  call_args
                     {
                       @lexer.cmdarg = val[0]
 
                       result = val[1]
-                    }
-
-       open_args: call_args
-                    {
-                      result = [ nil, val[0], nil ]
-                    }
-                | tLPAREN_ARG
-                    {
-                      @lexer.state = :expr_endarg
-                    }
-                    rparen
-                    {
-                      result = [ val[0], [], val[2] ]
-                    }
-                | tLPAREN_ARG call_args2
-                    {
-                      @lexer.state = :expr_endarg
-                    }
-                    rparen
-                    {
-                      result = [ val[0], val[1], val[3] ]
                     }
 
        block_arg: tAMPER arg_value
@@ -915,10 +888,6 @@ rule
    opt_block_arg: tCOMMA block_arg
                     {
                       result = [ val[1] ]
-                    }
-                | tCOMMA
-                    {
-                      result = []
                     }
                 | # nothing
                     {
@@ -942,6 +911,12 @@ rule
                       result = val[0] << @builder.splat(val[2], val[3])
                     }
 
+        mrhs_arg: mrhs
+                    {
+                      result = @builder.array(nil, val[0], nil)
+                    }
+                | arg_value
+
             mrhs: args tCOMMA arg_value
                     {
                       result = val[0] << val[2]
@@ -961,23 +936,47 @@ rule
                 | regexp
                 | words
                 | qwords
+                | symbols
+                | qsymbols
                 | var_ref
                 | backref
                 | tFID
                     {
                       result = @builder.call_method(nil, nil, val[0])
                     }
-                | kBEGIN bodystmt kEND
+                | kBEGIN
                     {
-                      result = @builder.begin_keyword(val[0], val[1], val[2])
+                      result = @lexer.cmdarg.dup
+                      @lexer.cmdarg.clear
                     }
-                | tLPAREN_ARG expr
+                    bodystmt kEND
+                    {
+                      @lexer.cmdarg = val[1]
+
+                      result = @builder.begin_keyword(val[0], val[2], val[3])
+                    }
+                | tLPAREN_ARG
+                    {
+                      result = @lexer.cmdarg.dup
+                      @lexer.cmdarg.clear
+                    }
+                    expr
                     {
                       @lexer.state = :expr_endarg
                     }
-                    rparen
+                    opt_nl tRPAREN
                     {
-                      result = @builder.begin(val[0], val[1], val[3])
+                      @lexer.cmdarg = val[1]
+
+                      result = @builder.begin(val[0], val[2], val[5])
+                    }
+                | tLPAREN_ARG
+                    {
+                      @lexer.state = :expr_endarg
+                    }
+                    opt_nl tRPAREN
+                    {
+                      result = @builder.begin(val[0], nil, val[3])
                     }
                 | tLPAREN compstmt tRPAREN
                     {
@@ -1028,7 +1027,7 @@ rule
                     {
                       result = @builder.not_op(val[0], val[1], nil, val[2])
                     }
-                | operation brace_block
+                | fcall brace_block
                     {
                       method_call = @builder.call_method(nil, nil, val[0])
 
@@ -1259,6 +1258,9 @@ rule
                 | mlhs
 
           f_marg: f_norm_arg
+                    {
+                      result = @builder.arg(val[0])
+                    }
                 | tLPAREN f_margs rparen
                     {
                       result = @builder.multi_lhs(val[0], val[1], val[2])
@@ -1277,52 +1279,79 @@ rule
                 | f_marg_list tCOMMA tSTAR f_norm_arg
                     {
                       result = val[0].
-                                  push(@builder.objc_restarg(val[2], val[3]))
+                                  push(@builder.restarg(val[2], val[3]))
                     }
                 | f_marg_list tCOMMA tSTAR f_norm_arg tCOMMA f_marg_list
                     {
                       result = val[0].
-                                  push(@builder.objc_restarg(val[2], val[3])).
+                                  push(@builder.restarg(val[2], val[3])).
                                   concat(val[5])
                     }
                 | f_marg_list tCOMMA tSTAR
                     {
                       result = val[0].
-                                  push(@builder.objc_restarg(val[2]))
+                                  push(@builder.restarg(val[2]))
                     }
                 | f_marg_list tCOMMA tSTAR            tCOMMA f_marg_list
                     {
                       result = val[0].
-                                  push(@builder.objc_restarg(val[2])).
+                                  push(@builder.restarg(val[2])).
                                   concat(val[4])
                     }
                 |                    tSTAR f_norm_arg
                     {
-                      result = [ @builder.objc_restarg(val[0], val[1]) ]
+                      result = [ @builder.restarg(val[0], val[1]) ]
                     }
                 |                    tSTAR f_norm_arg tCOMMA f_marg_list
                     {
-                      result = [ @builder.objc_restarg(val[0], val[1]),
+                      result = [ @builder.restarg(val[0], val[1]),
                                  *val[3] ]
                     }
                 |                    tSTAR
                     {
-                      result = [ @builder.objc_restarg(val[0]) ]
+                      result = [ @builder.restarg(val[0]) ]
                     }
                 |                    tSTAR tCOMMA f_marg_list
                     {
-                      result = [ @builder.objc_restarg(val[0]),
+                      result = [ @builder.restarg(val[0]),
                                  *val[2] ]
                     }
 
-     block_param: f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg              opt_f_block_arg
+ block_args_tail: f_block_kwarg tCOMMA f_kwrest opt_f_block_arg
+                    {
+                      result = val[0].concat(val[2]).concat(val[3])
+                    }
+                | f_block_kwarg opt_f_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | f_kwrest opt_f_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | f_block_arg
+                    {
+                      result = [ val[0] ]
+                    }
+
+opt_block_args_tail:
+                  tCOMMA block_args_tail
+                    {
+                      result = val[1]
+                    }
+                | # nothing
+                    {
+                      result = []
+                    }
+
+     block_param: f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg              opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                | f_arg tCOMMA f_block_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
@@ -1330,76 +1359,73 @@ rule
                                   concat(val[6]).
                                   concat(val[7])
                     }
-                | f_arg tCOMMA f_block_optarg                                opt_f_block_arg
+                | f_arg tCOMMA f_block_optarg                                opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                | f_arg tCOMMA f_block_optarg tCOMMA                   f_arg opt_f_block_arg
+                | f_arg tCOMMA f_block_optarg tCOMMA                   f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg tCOMMA                       f_rest_arg              opt_f_block_arg
+                | f_arg tCOMMA                       f_rest_arg              opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
                 | f_arg tCOMMA
-                | f_arg tCOMMA                       f_rest_arg tCOMMA f_arg opt_f_block_arg
+                | f_arg tCOMMA                       f_rest_arg tCOMMA f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg                                                      opt_f_block_arg
+                | f_arg                                                      opt_block_args_tail
                     {
                       result = val[0].concat(val[1])
                     }
-                | f_block_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                | f_block_optarg tCOMMA              f_rest_arg              opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                | f_block_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                | f_block_optarg tCOMMA              f_rest_arg tCOMMA f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_block_optarg                                opt_f_block_arg
+                | f_block_optarg                                             opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[1])
                     }
-                | f_block_optarg tCOMMA                   f_arg opt_f_block_arg
+                | f_block_optarg tCOMMA                                f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                |                       f_rest_arg              opt_f_block_arg
+                |                                    f_rest_arg              opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[1])
                     }
-                |                       f_rest_arg tCOMMA f_arg opt_f_block_arg
+                |                                    f_rest_arg tCOMMA f_arg opt_block_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                |                                                   f_block_arg
-                    {
-                      result = [ val[0] ]
-                    }
+                |                                                                block_args_tail
 
  opt_block_param: # nothing
                     {
@@ -1423,13 +1449,13 @@ rule
                       result = @builder.args(val[0], val[1].concat(val[2]), val[3])
                     }
 
-     opt_bv_decl: # nothing
+     opt_bv_decl: opt_nl
                     {
                       result = []
                     }
-                | tSEMI bv_decls
+                | opt_nl tSEMI bv_decls opt_nl
                     {
-                      result = val[1]
+                      result = val[2]
                     }
 
         bv_decls: bvar
@@ -1450,14 +1476,22 @@ rule
           lambda:   {
                       @static_env.extend_dynamic
                     }
-                  f_larglist lambda_body
+                  f_larglist
                     {
-                      result = [ val[1], val[2] ]
+                      result = @lexer.cmdarg.dup
+                      @lexer.cmdarg.clear
+                    }
+                  lambda_body
+                    {
+                      @lexer.cmdarg = val[2]
+                      @lexer.cmdarg.lexpop
+
+                      result = [ val[1], val[3] ]
 
                       @static_env.unextend
                     }
 
-     f_larglist: tLPAREN2 f_args opt_bv_decl rparen
+     f_larglist: tLPAREN2 f_args opt_bv_decl tRPAREN
                     {
                       result = @builder.args(val[0], val[1].concat(val[2]), val[3])
                     }
@@ -1492,26 +1526,39 @@ rule
                       result      = @builder.block(val[0],
                                       begin_t, block_args, body, end_t)
                     }
-                | block_call tDOT operation2 opt_paren_args
+                | block_call dot_or_colon operation2 opt_paren_args
                     {
                       lparen_t, args, rparen_t = val[3]
                       result = @builder.call_method(val[0], val[1], val[2],
                                   lparen_t, args, rparen_t)
                     }
-                | block_call tCOLON2 operation2 opt_paren_args
+                | block_call dot_or_colon operation2 opt_paren_args brace_block
                     {
                       lparen_t, args, rparen_t = val[3]
-                      result = @builder.call_method(val[0], val[1], val[2],
-                                  lparen_t, args, rparen_t)
+                      method_call = @builder.call_method(val[0], val[1], val[2],
+                                      lparen_t, args, rparen_t)
+
+                      begin_t, args, body, end_t = val[4]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
+                    }
+                | block_call dot_or_colon operation2 command_args do_block
+                    {
+                      method_call = @builder.call_method(val[0], val[1], val[2],
+                                      nil, val[3], nil)
+
+                      begin_t, args, body, end_t = val[4]
+                      result      = @builder.block(method_call,
+                                      begin_t, args, body, end_t)
                     }
 
-     method_call: operation paren_args
+     method_call: fcall paren_args
                     {
                       lparen_t, args, rparen_t = val[1]
                       result = @builder.call_method(nil, nil, val[0],
                                   lparen_t, args, rparen_t)
                     }
-                | primary_value tDOT operation2 opt_paren_args
+                | primary_value call_op operation2 opt_paren_args
                     {
                       lparen_t, args, rparen_t = val[3]
                       result = @builder.call_method(val[0], val[1], val[2],
@@ -1527,7 +1574,7 @@ rule
                     {
                       result = @builder.call_method(val[0], val[1], val[2])
                     }
-                | primary_value tDOT paren_args
+                | primary_value call_op paren_args
                     {
                       lparen_t, args, rparen_t = val[2]
                       result = @builder.call_method(val[0], val[1], nil,
@@ -1568,7 +1615,7 @@ rule
                     {
                       @static_env.extend_dynamic
                     }
-                    opt_block_param compstmt kEND
+                 opt_block_param compstmt kEND
                     {
                       result = [ val[0], val[2], val[3], val[4] ]
 
@@ -1689,9 +1736,28 @@ rule
                       result = val[0] << val[1]
                     }
 
+         symbols: tSYMBOLS_BEG symbol_list tSTRING_END
+                    {
+                      result = @builder.symbols_compose(val[0], val[1], val[2])
+                    }
+
+     symbol_list: # nothing
+                    {
+                      result = []
+                    }
+                | symbol_list word tSPACE
+                    {
+                      result = val[0] << @builder.word(val[1])
+                    }
+
           qwords: tQWORDS_BEG qword_list tSTRING_END
                     {
                       result = @builder.words_compose(val[0], val[1], val[2])
+                    }
+
+        qsymbols: tQSYMBOLS_BEG qsym_list tSTRING_END
+                    {
+                      result = @builder.symbols_compose(val[0], val[1], val[2])
                     }
 
       qword_list: # nothing
@@ -1701,6 +1767,15 @@ rule
                 | qword_list tSTRING_CONTENT tSPACE
                     {
                       result = val[0] << @builder.string_internal(val[1])
+                    }
+
+       qsym_list: # nothing
+                    {
+                      result = []
+                    }
+                | qsym_list tSTRING_CONTENT tSPACE
+                    {
+                      result = val[0] << @builder.symbol_internal(val[1])
                     }
 
  string_contents: # nothing
@@ -1743,7 +1818,7 @@ regexp_contents: # nothing
                       @lexer.cond.push(false)
                       @lexer.cmdarg.push(false)
                     }
-                    compstmt tRCURLY
+                    compstmt tSTRING_DEND
                     {
                       @lexer.cond.lexpop
                       @lexer.cmdarg.lexpop
@@ -1776,7 +1851,16 @@ regexp_contents: # nothing
                       result = @builder.symbol_compose(val[0], val[1], val[2])
                     }
 
-         numeric: tINTEGER
+         numeric: simple_numeric
+                    {
+                      result = val[0]
+                    }
+                | tUMINUS_NUM simple_numeric =tLOWEST
+                    {
+                      result = @builder.negate(val[0], val[1])
+                    }
+
+  simple_numeric: tINTEGER
                     {
                       result = @builder.integer(val[0])
                     }
@@ -1784,18 +1868,16 @@ regexp_contents: # nothing
                     {
                       result = @builder.float(val[0])
                     }
-                | tUMINUS_NUM tINTEGER =tLOWEST
+                | tRATIONAL
                     {
-                      result = @builder.negate(val[0],
-                                  @builder.integer(val[1]))
+                      result = @builder.rational(val[0])
                     }
-                | tUMINUS_NUM tFLOAT   =tLOWEST
+                | tIMAGINARY
                     {
-                      result = @builder.negate(val[0],
-                                  @builder.float(val[1]))
+                      result = @builder.complex(val[0])
                     }
 
-        variable: tIDENTIFIER
+   user_variable: tIDENTIFIER
                     {
                       result = @builder.ident(val[0])
                     }
@@ -1815,7 +1897,8 @@ regexp_contents: # nothing
                     {
                       result = @builder.cvar(val[0])
                     }
-                | kNIL
+
+keyword_variable: kNIL
                     {
                       result = @builder.nil(val[0])
                     }
@@ -1844,12 +1927,20 @@ regexp_contents: # nothing
                       result = @builder.__ENCODING__(val[0])
                     }
 
-         var_ref: variable
+         var_ref: user_variable
+                    {
+                      result = @builder.accessible(val[0])
+                    }
+                | keyword_variable
                     {
                       result = @builder.accessible(val[0])
                     }
 
-         var_lhs: variable
+         var_lhs: user_variable
+                    {
+                      result = @builder.assignable(val[0])
+                    }
+                | keyword_variable
                     {
                       result = @builder.assignable(val[0])
                     }
@@ -1867,9 +1958,13 @@ regexp_contents: # nothing
                     {
                       result = nil
                     }
-                | tLT expr_value term
+                | tLT
                     {
-                      result = [ val[0], val[1] ]
+                      @lexer.state = :expr_value
+                    }
+                    expr_value term
+                    {
+                      result = [ val[0], val[2] ]
                     }
                 | error term
                     {
@@ -1883,19 +1978,50 @@ regexp_contents: # nothing
 
                       @lexer.state = :expr_value
                     }
-                | f_args term
+                |   {
+                      result = @lexer.in_kwarg
+                      @lexer.in_kwarg = true
+                    }
+                  f_args term
                     {
-                      result = @builder.args(nil, val[0], nil)
+                      @lexer.in_kwarg = val[0]
+                      result = @builder.args(nil, val[1], nil)
                     }
 
-          f_args: f_arg tCOMMA f_optarg tCOMMA f_rest_arg              opt_f_block_arg
+       args_tail: f_kwarg tCOMMA f_kwrest opt_f_block_arg
+                    {
+                      result = val[0].concat(val[2]).concat(val[3])
+                    }
+                | f_kwarg opt_f_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | f_kwrest opt_f_block_arg
+                    {
+                      result = val[0].concat(val[1])
+                    }
+                | f_block_arg
+                    {
+                      result = [ val[0] ]
+                    }
+
+   opt_args_tail: tCOMMA args_tail
+                    {
+                      result = val[1]
+                    }
+                | # nothing
+                    {
+                      result = []
+                    }
+
+          f_args: f_arg tCOMMA f_optarg tCOMMA f_rest_arg              opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg tCOMMA f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                | f_arg tCOMMA f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
@@ -1903,75 +2029,75 @@ regexp_contents: # nothing
                                   concat(val[6]).
                                   concat(val[7])
                     }
-                | f_arg tCOMMA f_optarg                                opt_f_block_arg
+                | f_arg tCOMMA f_optarg                                opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                | f_arg tCOMMA f_optarg tCOMMA                   f_arg opt_f_block_arg
+                | f_arg tCOMMA f_optarg tCOMMA                   f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg tCOMMA                 f_rest_arg              opt_f_block_arg
+                | f_arg tCOMMA                 f_rest_arg              opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                | f_arg tCOMMA                 f_rest_arg tCOMMA f_arg opt_f_block_arg
+                | f_arg tCOMMA                 f_rest_arg tCOMMA f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                | f_arg                                                opt_f_block_arg
+                | f_arg                                                opt_args_tail
                     {
                       result = val[0].
                                   concat(val[1])
                     }
-                |              f_optarg tCOMMA f_rest_arg              opt_f_block_arg
+                |              f_optarg tCOMMA f_rest_arg              opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                |              f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_f_block_arg
+                |              f_optarg tCOMMA f_rest_arg tCOMMA f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[4]).
                                   concat(val[5])
                     }
-                |              f_optarg                                opt_f_block_arg
+                |              f_optarg                                opt_args_tail
                     {
                       result = val[0].
                                   concat(val[1])
                     }
-                |              f_optarg tCOMMA                   f_arg opt_f_block_arg
+                |              f_optarg tCOMMA                   f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                |                              f_rest_arg              opt_f_block_arg
+                |                              f_rest_arg              opt_args_tail
                     {
                       result = val[0].
                                   concat(val[1])
                     }
-                |                              f_rest_arg tCOMMA f_arg opt_f_block_arg
+                |                              f_rest_arg tCOMMA f_arg opt_args_tail
                     {
                       result = val[0].
                                   concat(val[2]).
                                   concat(val[3])
                     }
-                |                                                          f_block_arg
+                |                                                          args_tail
                     {
-                      result = [ val[0] ]
+                      result = val[0]
                     }
                 | # nothing
                     {
@@ -2000,22 +2126,18 @@ regexp_contents: # nothing
                     {
                       @static_env.declare val[0][0]
 
+                      result = val[0]
+                    }
+
+      f_arg_asgn: f_norm_arg
+                    {
+                      result = val[0]
+                    }
+
+      f_arg_item: f_arg_asgn
+                    {
                       result = @builder.arg(val[0])
                     }
-                | tIDENTIFIER tASSOC tIDENTIFIER
-                    {
-                      @static_env.declare val[2][0]
-
-                      result = @builder.objc_kwarg(val[0], val[1], val[2])
-                    }
-                | tLABEL tIDENTIFIER
-                    {
-                      @static_env.declare val[1][0]
-
-                      result = @builder.objc_kwarg(val[0], nil, val[1])
-                    }
-
-      f_arg_item: f_norm_arg
                 | tLPAREN f_margs rparen
                     {
                       result = @builder.multi_lhs(val[0], val[1], val[2])
@@ -2030,17 +2152,71 @@ regexp_contents: # nothing
                       result = val[0] << val[2]
                     }
 
-           f_opt: tIDENTIFIER tEQL arg_value
+         f_label: tLABEL
                     {
+                      check_kwarg_name(val[0])
+
                       @static_env.declare val[0][0]
 
+                      result = val[0]
+                    }
+
+            f_kw: f_label arg_value
+                    {
+                      result = @builder.kwoptarg(val[0], val[1])
+                    }
+                | f_label
+                    {
+                      result = @builder.kwarg(val[0])
+                    }
+
+      f_block_kw: f_label primary_value
+                    {
+                      result = @builder.kwoptarg(val[0], val[1])
+                    }
+                | f_label
+                    {
+                      result = @builder.kwarg(val[0])
+                    }
+
+   f_block_kwarg: f_block_kw
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_block_kwarg tCOMMA f_block_kw
+                    {
+                      result = val[0] << val[2]
+                    }
+
+         f_kwarg: f_kw
+                    {
+                      result = [ val[0] ]
+                    }
+                | f_kwarg tCOMMA f_kw
+                    {
+                      result = val[0] << val[2]
+                    }
+
+     kwrest_mark: tPOW | tDSTAR
+
+        f_kwrest: kwrest_mark tIDENTIFIER
+                    {
+                      @static_env.declare val[1][0]
+
+                      result = [ @builder.kwrestarg(val[0], val[1]) ]
+                    }
+                | kwrest_mark
+                    {
+                      result = [ @builder.kwrestarg(val[0]) ]
+                    }
+
+           f_opt: f_arg_asgn tEQL arg_value
+                    {
                       result = @builder.optarg(val[0], val[1], val[2])
                     }
 
-     f_block_opt: tIDENTIFIER tEQL primary_value
+     f_block_opt: f_arg_asgn tEQL primary_value
                     {
-                      @static_env.declare val[0][0]
-
                       result = @builder.optarg(val[0], val[1], val[2])
                     }
 
@@ -2088,7 +2264,7 @@ regexp_contents: # nothing
                     {
                       result = [ val[1] ]
                     }
-                | # nothing
+                |
                     {
                       result = []
                     }
@@ -2122,11 +2298,27 @@ regexp_contents: # nothing
                     {
                       result = @builder.pair_keyword(val[0], val[1])
                     }
+                | tSTRING_BEG string_contents tLABEL_END arg_value
+                    {
+                      result = @builder.pair_quoted(val[0], val[1], val[2], val[3])
+                    }
+                | tDSTAR arg_value
+                    {
+                      result = @builder.kwsplat(val[0], val[1])
+                    }
 
        operation: tIDENTIFIER | tCONSTANT | tFID
       operation2: tIDENTIFIER | tCONSTANT | tFID | op
       operation3: tIDENTIFIER | tFID | op
-    dot_or_colon: tDOT | tCOLON2
+    dot_or_colon: call_op | tCOLON2
+         call_op: tDOT
+                    {
+                      result = [:dot, val[0][1]]
+                    }
+                | tANDDOT
+                    {
+                      result = [:anddot, val[0][1]]
+                    }
        opt_terms:  | terms
           opt_nl:  | tNL
           rparen: opt_nl tRPAREN
@@ -2163,9 +2355,9 @@ Parser.check_for_encoding_support
 ---- inner
 
   def version
-    19 # closest released match: v1_9_0_2
+    23
   end
 
   def default_encoding
-    Encoding::BINARY
+    Encoding::UTF_8
   end

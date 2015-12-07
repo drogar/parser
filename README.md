@@ -5,8 +5,9 @@
 [![Code Climate](https://codeclimate.com/github/whitequark/parser.png)](https://codeclimate.com/github/whitequark/parser)
 [![Coverage Status](https://coveralls.io/repos/whitequark/parser/badge.png?branch=master)](https://coveralls.io/r/whitequark/parser)
 
-_Parser_ is a production-ready Ruby parser written in pure Ruby. It performs on
-par or better than Ripper, Melbourne, JRubyParser or ruby\_parser.
+_Parser_ is a production-ready Ruby parser written in pure Ruby. It recognizes as
+much or more code than Ripper, Melbourne, JRubyParser or ruby\_parser, and
+is vastly more convenient to use.
 
 You can also use [unparser](https://github.com/mbj/unparser) to produce
 equivalent source code from Parser's ASTs.
@@ -23,6 +24,7 @@ MacRuby and RubyMotion support sponsored by [CodeClimate](http://codeclimate.com
 Parse a chunk of code:
 
     require 'parser/current'
+    Parser::Builders::Default.emit_lambda = true # opt-in to most recent AST format
 
     p Parser::CurrentRuby.parse("2 + 2")
     # (send

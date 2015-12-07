@@ -3,6 +3,8 @@
 require 'helper'
 require 'parse_helper'
 
+Parser::Builders::Default.modernize
+
 class TestParser < Minitest::Test
   include ParseHelper
 
@@ -361,15 +363,20 @@ class TestParser < Minitest::Test
   end
 
   def test_regex_error
-    # The tests work on 1.8, but with a different message.
+    begin
+      Regexp.new("?")
+    rescue RegexpError => e
+      message = e.message
+    end
+
     assert_diagnoses(
-      [:error, :invalid_regexp, {:message => 'target of repeat operator is not specified: /?/'}],
+      [:error, :invalid_regexp, {:message => message}],
       %q[/?/],
       %q(~~~ location),
       ALL_VERSIONS - %w(1.8))
 
     assert_diagnoses(
-      [:error, :invalid_regexp, {:message => 'target of repeat operator is not specified: /?/'}],
+      [:error, :invalid_regexp, {:message => message}],
       %q[/#{""}?/],
       %q(~~~~~~~~ location),
       ALL_VERSIONS - %w(1.8))
@@ -3106,20 +3113,20 @@ class TestParser < Minitest::Test
 
   def test_send_lambda
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args), nil),
       %q{->{ }},
-      %q{~~ selector (send)
+      %q{~~ expression (lambda)
         |  ^ begin
         |    ^ end
         |~~~~~ expression},
       ALL_VERSIONS - %w(1.8))
 
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args, s(:restarg)), nil),
       %q{-> * { }},
-      %q{~~ selector (send)
+      %q{~~ expression (lambda)
         |     ^ begin
         |       ^ end
         |   ^ expression (args.restarg)
@@ -3127,10 +3134,10 @@ class TestParser < Minitest::Test
       ALL_VERSIONS - %w(1.8))
 
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args), nil),
       %q{-> do end},
-      %q{~~ selector (send)
+      %q{~~ expression (lambda)
         |   ^^ begin
         |      ^^^ end
         |~~~~~~~~~ expression},
@@ -3139,12 +3146,12 @@ class TestParser < Minitest::Test
 
   def test_send_lambda_args
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args,
           s(:arg, :a)),
         nil),
       %q{->(a) { }},
-      %q{~~ selector (send)
+      %q{~~ expression (lambda)
         |  ^ begin (args)
         |    ^ end (args)
         |      ^ begin
@@ -3153,7 +3160,7 @@ class TestParser < Minitest::Test
       ALL_VERSIONS - %w(1.8))
 
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args,
           s(:arg, :a)),
         nil),
@@ -3164,7 +3171,7 @@ class TestParser < Minitest::Test
 
   def test_send_lambda_args_shadow
     assert_parses(
-      s(:block, s(:send, nil, :lambda),
+      s(:block, s(:lambda),
         s(:args,
           s(:arg, :a),
           s(:shadowarg, :foo),
@@ -3173,6 +3180,40 @@ class TestParser < Minitest::Test
       %q{->(a; foo, bar) { }},
       %q{      ~~~ expression (args.shadowarg)},
       ALL_VERSIONS - %w(1.8))
+  end
+
+  def test_send_lambda_args_noparen
+    assert_parses(
+      s(:block, s(:lambda),
+        s(:args,
+          s(:kwoptarg, :a, s(:int, 1))),
+        nil),
+      %q{-> a: 1 { }},
+      %q{},
+      ALL_VERSIONS - %w(1.8 1.9 mac ios))
+
+    assert_parses(
+      s(:block, s(:lambda),
+        s(:args,
+          s(:kwarg, :a)),
+        nil),
+      %q{-> a: { }},
+      %q{},
+      ALL_VERSIONS - %w(1.8 1.9 mac ios 2.0))
+  end
+
+  def test_send_lambda_legacy
+    Parser::Builders::Default.emit_lambda = false
+    assert_parses(
+      s(:block, s(:send, nil, :lambda),
+        s(:args), nil),
+      %q{->{ }},
+      %q{~~ selector (send)
+        |  ^ begin
+        |    ^ end
+        |~~~~~ expression},
+      ALL_VERSIONS - %w(1.8))
+    Parser::Builders::Default.emit_lambda = true
   end
 
   def test_send_call
@@ -3195,6 +3236,22 @@ class TestParser < Minitest::Test
         |   ^^ dot
         |~~~~~~~~ expression},
       ALL_VERSIONS - %w(1.8))
+  end
+
+  def test_send_conditional
+    assert_parses(
+      s(:csend, s(:send, nil, :a), :b),
+      %q{a&.b},
+      %q{ ^^ dot},
+      ALL_VERSIONS - %w(1.8 1.9 2.0 2.1 2.2 ios mac))
+  end
+
+  def test_send_attr_asgn_conditional
+    assert_parses(
+      s(:csend, s(:send, nil, :a), :b=, s(:int, 1)),
+      %q{a&.b = 1},
+      %q{ ^^ dot},
+      ALL_VERSIONS - %w(1.8 1.9 2.0 2.1 2.2 ios mac))
   end
 
   def test_lvar_injecting_match
@@ -4724,7 +4781,7 @@ class TestParser < Minitest::Test
           s(:pair,
             s(:sym, :x),
             s(:block,
-              s(:send, nil, :lambda),
+              s(:lambda),
               s(:args),
               s(:block,
                 s(:send, nil, :meth),
@@ -4999,7 +5056,7 @@ class TestParser < Minitest::Test
     assert_parses(
       s(:send, nil, :p,
         s(:block,
-          s(:send, nil, :lambda),
+          s(:lambda),
           s(:args),
           s(:block, s(:send, nil, :a), s(:args), nil))),
       %q{p ->() do a() do end end},
@@ -5012,7 +5069,7 @@ class TestParser < Minitest::Test
       s(:block,
         s(:send, nil, :p,
           s(:block,
-            s(:send, nil, :lambda),
+            s(:lambda),
             s(:args),
             s(:sym, :hello)),
           s(:hash,
@@ -5040,7 +5097,7 @@ class TestParser < Minitest::Test
     assert_parses(
       s(:begin,
         s(:block,
-          s(:send, nil, :lambda),
+          s(:lambda),
           s(:args,
             s(:arg, :scope)), nil),
         s(:send, nil, :scope)),

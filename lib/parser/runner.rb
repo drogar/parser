@@ -12,6 +12,8 @@ module Parser
     end
 
     def initialize
+      Parser::Builders::Default.modernize
+
       @option_parser = OptionParser.new { |opts| setup_option_parsing(opts) }
       @parser_class  = nil
       @parser        = nil
@@ -80,6 +82,11 @@ module Parser
       opts.on '--22', 'Parse as Ruby 2.2 would' do
         require 'parser/ruby22'
         @parser_class = Parser::Ruby22
+      end
+
+      opts.on '--23', 'Parse as Ruby 2.3 would' do
+        require 'parser/ruby23'
+        @parser_class = Parser::Ruby23
       end
 
       opts.on '--mac', 'Parse as MacRuby 0.12 would' do

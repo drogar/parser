@@ -7,7 +7,7 @@ token kCLASS kMODULE kDEF kUNDEF kBEGIN kRESCUE kENSURE kEND kIF kUNLESS
       kUNTIL_MOD kRESCUE_MOD kALIAS kDEFINED klBEGIN klEND k__LINE__
       k__FILE__ k__ENCODING__ tIDENTIFIER tFID tGVAR tIVAR tCONSTANT
       tLABEL tCVAR tNTH_REF tBACK_REF tSTRING_CONTENT tINTEGER tFLOAT
-      tREGEXP_END tUPLUS tUMINUS tUMINUS_NUM tPOW tCMP tEQ tEQQ tNEQ
+      tUPLUS tUMINUS tUMINUS_NUM tPOW tCMP tEQ tEQQ tNEQ
       tGEQ tLEQ tANDOP tOROP tMATCH tNMATCH tDOT tDOT2 tDOT3 tAREF
       tASET tLSHFT tRSHFT tCOLON2 tCOLON3 tOP_ASGN tASSOC tLPAREN
       tLPAREN2 tRPAREN tLPAREN_ARG tLBRACK tLBRACK2 tRBRACK tLBRACE
@@ -785,6 +785,11 @@ rule
                       result = @builder.keyword_cmd(:defined?, val[0], nil, [ val[2] ], nil)
                     }
 
+                # Note: MRI eventually came to rely on disambiguation based on
+                # the lexer state, but it is too contrived with the Ragel lexer,
+                # so we kept this approach. See ruby/ruby@b0c03f63e5 for
+                # the initial commit, and ruby/ruby@23352f62a for MRI revert,
+                # which we decided not to track.
                 | arg tEH
                     {
                       @lexer.push_cond

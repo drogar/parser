@@ -540,6 +540,31 @@ Format:
  ~~~~~~~ expression
 ~~~
 
+### To attribute
+
+Format:
+
+~~~
+(send (self) :foo= (int 1))
+"self.foo = 1"
+     ^ dot
+      ~~~ selector
+          ^ operator
+ ~~~~~~~~~~~~ expression
+~~~
+
+### To attribute, using "safe navigation operator"
+
+Format:
+
+~~~
+(csend (self) :foo= (int 1))
+"self&.foo = 1"
+     ^^ dot
+       ~~~ selector
+           ^ operator
+ ~~~~~~~~~~~~~ expression
+~~~
 
 ### Multiple assignment
 
@@ -1011,9 +1036,9 @@ Format:
 ~~~
 (objc-restarg (objc-kwarg :foo))
 "(*a: b)"
-   ~ arg.keyword
-    ~ arg.operator
-      ~ arg.argument
+   ~ objc-kwarg.keyword
+    ~ objc-kwarg.operator
+      ~ objc-kwarg.argument
   ~ operator
   ~~~~~ expression
 ~~~
@@ -1053,6 +1078,7 @@ Format:
 ~~~
 (send (lvar :foo) :bar (int 1))
 "foo.bar(1)"
+    ^ dot
      ~~~ selector
         ^ begin
           ^ end
@@ -1144,6 +1170,22 @@ Used when passing expression as block `foo(&bar)`
 "foo(1, &foo)"
         ^ operator
         ~~~~ expression
+~~~
+
+### "Stabby lambda"
+
+~~~
+(block (lambda) (args) nil)
+"-> {}"
+ ~~ lambda.expression
+~~~
+
+### "Safe navigation operator"
+
+~~~
+(csend (send nil :foo) :bar)
+"foo&.bar"
+    ~~ dot
 ~~~
 
 ### Objective-C variadic send

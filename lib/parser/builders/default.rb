@@ -4,6 +4,32 @@ module Parser
   # Default AST builder. Uses {AST::Node}s.
   #
   class Builders::Default
+    class << self
+      ##
+      # AST compatibility attribute; since `-> {}` is not semantically
+      # equivalent to `lambda {}`, all new code should set this attribute
+      # to true.
+      #
+      # If set to false (the default), `-> {}` is emitted as
+      # `s(:block, s(:send, nil, :lambda), s(:args), nil)`.
+      #
+      # If set to true, `-> {}` is emitted as
+      # `s(:block, s(:lambda), s(:args), nil)`.
+      #
+      # @return [Boolean]
+      attr_accessor :emit_lambda
+    end
+
+    @emit_lambda = false
+
+    class << self
+      ##
+      # @api private
+      def modernize
+        @emit_lambda = true
+      end
+    end
+
     ##
     # @api private
     attr_accessor :parser
@@ -650,20 +676,41 @@ module Parser
     # Method calls
     #
 
+    def call_type_for_dot(dot_t)
+      if !dot_t.nil? && value(dot_t) == :anddot
+        :csend
+      else
+        # This case is a bit tricky. ruby23.y returns the token tDOT with
+        # the value :dot, and the token :tANDDOT with the value :anddot.
+        #
+        # But, ruby{18..22}.y (which unconditionally expect tDOT) just
+        # return "." there, since they are to be kept close to the corresponding
+        # Ruby MRI grammars.
+        #
+        # Thankfully, we don't have to care.
+        :send
+      end
+    end
+
     def call_method(receiver, dot_t, selector_t,
                     lparen_t=nil, args=[], rparen_t=nil)
+      type = call_type_for_dot(dot_t)
       if selector_t.nil?
-        n(:send, [ receiver, :call, *args ],
+        n(type, [ receiver, :call, *args ],
           send_map(receiver, dot_t, nil, lparen_t, args, rparen_t))
       else
-        n(:send, [ receiver, value(selector_t).to_sym, *args ],
+        n(type, [ receiver, value(selector_t).to_sym, *args ],
           send_map(receiver, dot_t, selector_t, lparen_t, args, rparen_t))
       end
     end
 
     def call_lambda(lambda_t)
-      n(:send, [ nil, :lambda ],
-        send_map(nil, nil, lambda_t))
+      if self.class.emit_lambda
+        n0(:lambda, expr_map(loc(lambda_t)))
+      else
+        n(:send, [ nil, :lambda ],
+          send_map(nil, nil, lambda_t))
+      end
     end
 
     def block(method_call, begin_t, args, body, end_t)
@@ -678,7 +725,7 @@ module Parser
         diagnostic :error, :block_and_blockarg, nil, last_arg.loc.expression, [loc(begin_t)]
       end
 
-      if [:send, :super, :zsuper].include?(method_call.type)
+      if [:send, :super, :zsuper, :lambda].include?(method_call.type)
         n(:block, [ method_call, args, body ],
           block_map(method_call.loc.expression, begin_t, end_t))
       else
@@ -710,9 +757,10 @@ module Parser
 
     def attr_asgn(receiver, dot_t, selector_t)
       method_name = (value(selector_t) + '=').to_sym
+      type = call_type_for_dot(dot_t)
 
       # Incomplete method call.
-      n(:send, [ receiver, method_name ],
+      n(type, [ receiver, method_name ],
         send_map(receiver, dot_t, selector_t))
     end
 
