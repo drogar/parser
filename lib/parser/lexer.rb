@@ -1,3 +1,4 @@
+# -*- encoding:utf-8; warn-indent:false; frozen_string_literal: true  -*-
 
 # line 1 "lib/parser/lexer.rl"
 
