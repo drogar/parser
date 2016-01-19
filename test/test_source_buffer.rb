@@ -100,4 +100,45 @@ class TestSourceBuffer < Minitest::Test
     assert_equal '1', @buffer.source_line(5)
     assert_equal 'foo', @buffer.source_line(6)
   end
+
+  def test_line_range
+    @buffer = Parser::Source::Buffer.new('(string)', 5)
+    @buffer.source = "abc\ndef\nghi\n"
+
+    assert_raises IndexError do
+      @buffer.line_range(4)
+    end
+    assert_equal 'abc', @buffer.line_range(5).source
+    assert_equal 'def', @buffer.line_range(6).source
+    assert_equal 'ghi', @buffer.line_range(7).source
+    assert_equal '', @buffer.line_range(8).source
+    assert_raises IndexError do
+      @buffer.line_range(9)
+    end
+  end
+
+  def test_last_line
+    @buffer.source = "1\nfoo\nbar"
+    assert_equal 3, @buffer.last_line
+
+    @buffer = Parser::Source::Buffer.new('(string)', 5)
+    @buffer.source = ""
+    assert_equal 5, @buffer.last_line
+
+    @buffer = Parser::Source::Buffer.new('(string)', 5)
+    @buffer.source = "abc\n"
+    assert_equal 6, @buffer.last_line
+  end
+
+  def test_source_lines
+    @buffer.source = "1\nfoo\nbar\n"
+
+    assert_equal ['1', 'foo', 'bar', ''], @buffer.source_lines
+    assert @buffer.source_lines.frozen?
+    assert @buffer.source_lines.all?(&:frozen?)
+
+    @buffer = Parser::Source::Buffer.new('(string)', 5)
+    @buffer.source = "foo\nbar"
+    assert_equal ['foo', 'bar'], @buffer.source_lines
+  end
 end

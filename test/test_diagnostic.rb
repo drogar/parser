@@ -42,8 +42,31 @@ class TestDiagnostic < Minitest::Test
                                    location, highlights)
     assert_equal([
       "(string):1:27: error: unexpected `+'",
-      'if (this is some bad code + bugs)',
-      '                     ~~~~ ^ ~~~~ '
+      '(string):1: if (this is some bad code + bugs)',
+      '(string):1:                      ~~~~ ^ ~~~~ '
+    ], diag.render)
+  end
+
+  def test_multiline_render
+    @buffer = Parser::Source::Buffer.new('(string)')
+    @buffer.source = "abc abc abc\ndef def def\nghi ghi ghi\n"
+
+    location = Parser::Source::Range.new(@buffer, 4, 27)
+
+    highlights = [
+      Parser::Source::Range.new(@buffer, 0, 3),
+      Parser::Source::Range.new(@buffer, 28, 31)
+    ]
+
+    diag = Parser::Diagnostic.new(:error, :unexpected_token, { :token => 'ghi' },
+                                  location, highlights)
+
+    assert_equal([
+      "(string):1:5-3:3: error: unexpected token ghi",
+      '(string):1: abc abc abc',
+      '(string):1: ~~~ ^~~~~~~...',
+      '(string):3: ghi ghi ghi',
+      '(string):3: ~~~ ~~~    '
     ], diag.render)
   end
 end

@@ -784,25 +784,10 @@ rule
                     {
                       result = @builder.keyword_cmd(:defined?, val[0], nil, [ val[2] ], nil)
                     }
-
-                # Note: MRI eventually came to rely on disambiguation based on
-                # the lexer state, but it is too contrived with the Ragel lexer,
-                # so we kept this approach. See ruby/ruby@b0c03f63e5 for
-                # the initial commit, and ruby/ruby@23352f62a for MRI revert,
-                # which we decided not to track.
-                | arg tEH
-                    {
-                      @lexer.push_cond
-                      @lexer.cond.push(true)
-                    }
-                  arg opt_nl tCOLON
-                    {
-                      @lexer.pop_cond
-                    }
-                  arg
+                | arg tEH arg opt_nl tCOLON arg
                     {
                       result = @builder.ternary(val[0], val[1],
-                                                val[3], val[5], val[7])
+                                                val[2], val[4], val[5])
                     }
                 | primary
 
@@ -1691,11 +1676,13 @@ opt_block_args_tail:
 
          string1: tSTRING_BEG string_contents tSTRING_END
                     {
-                      result = @builder.string_compose(val[0], val[1], val[2])
+                      string = @builder.string_compose(val[0], val[1], val[2])
+                      result = @builder.dedent_string(string, @lexer.dedent_level)
                     }
                 | tSTRING
                     {
-                      result = @builder.string(val[0])
+                      string = @builder.string(val[0])
+                      result = @builder.dedent_string(string, @lexer.dedent_level)
                     }
                 | tCHARACTER
                     {
@@ -1704,7 +1691,8 @@ opt_block_args_tail:
 
          xstring: tXSTRING_BEG xstring_contents tSTRING_END
                     {
-                      result = @builder.xstring_compose(val[0], val[1], val[2])
+                      string = @builder.xstring_compose(val[0], val[1], val[2])
+                      result = @builder.dedent_string(string, @lexer.dedent_level)
                     }
 
           regexp: tREGEXP_BEG regexp_contents tSTRING_END tREGEXP_OPT
@@ -1954,11 +1942,7 @@ keyword_variable: kNIL
                       result = @builder.back_ref(val[0])
                     }
 
-      superclass: term
-                    {
-                      result = nil
-                    }
-                | tLT
+      superclass: tLT
                     {
                       @lexer.state = :expr_value
                     }
@@ -1966,9 +1950,8 @@ keyword_variable: kNIL
                     {
                       result = [ val[0], val[2] ]
                     }
-                | error term
+                | # nothing
                     {
-                      yyerrok
                       result = nil
                     }
 

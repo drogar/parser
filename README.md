@@ -2,7 +2,6 @@
 
 [![Gem Version](https://badge.fury.io/rb/parser.png)](https://badge.fury.io/rb/parser)
 [![Build Status](https://travis-ci.org/whitequark/parser.png?branch=master)](https://travis-ci.org/whitequark/parser)
-[![Code Climate](https://codeclimate.com/github/whitequark/parser.png)](https://codeclimate.com/github/whitequark/parser)
 [![Coverage Status](https://coveralls.io/repos/whitequark/parser/badge.png?branch=master)](https://coveralls.io/r/whitequark/parser)
 
 _Parser_ is a production-ready Ruby parser written in pure Ruby. It recognizes as
@@ -101,7 +100,7 @@ with Parser:
 * Precise source location reporting.
 * [Documented](doc/AST_FORMAT.md) AST format which is convenient to work with.
 * A simple interface and a powerful, tweakable one.
-* Parses 1.8, 1.9, 2.0, 2.1 and 2.2 syntax with backwards-compatible
+* Parses 1.8, 1.9, 2.0, 2.1, 2.2 and 2.3 syntax with backwards-compatible
   AST formats.
 * Parses MacRuby and RubyMotion syntax extensions.
 * [Rewriting][rewriting] support.
@@ -121,7 +120,7 @@ with Parser:
 
 ## Documentation
 
-Documentation for parser is available [online](https://whitequark.github.io/parser/).
+Documentation for Parser is available [online](https://whitequark.github.io/parser/).
 
 ### Node names
 
@@ -256,7 +255,7 @@ No known code is affected by this issue.
 
 ## Contributors
 
-* Peter Zotov ([whitequark][])
+* [whitequark][]
 * Markus Schirp ([mbj][])
 * Yorick Peterse ([yorickpeterse][])
 * Magnus Holm ([judofyr][])
