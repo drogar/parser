@@ -191,6 +191,25 @@ module Parser
       end
 
       ##
+      # Return an `Array` of source code lines.
+      #
+      # @return [Array<String>]
+      #
+      def source_lines
+        @lines ||= begin
+          lines = @source.lines.to_a
+          lines << '' if @source.end_with?("\n")
+
+          lines.each do |line|
+            line.chomp!(NEW_LINE)
+            line.freeze
+          end
+
+          lines.freeze
+        end
+      end
+
+      ##
       # Extract line `lineno` from source, taking `first_line` into account.
       #
       # @param  [Integer] lineno
@@ -198,16 +217,36 @@ module Parser
       # @raise  [IndexError] if `lineno` is out of bounds
       #
       def source_line(lineno)
-        unless @lines
-          @lines = @source.lines.to_a
-          @lines.each { |line| line.chomp!(NEW_LINE) }
+        source_lines.fetch(lineno - @first_line).dup
+      end
 
-          # If a file ends with a newline, the EOF token will appear
-          # to be one line further than the end of file.
-          @lines << ""
+      ##
+      # Extract line `lineno` as a new `Range`, taking `first_line` into account.
+      #
+      # @param  [Integer] lineno
+      # @return [Range]
+      # @raise  [IndexError] if `lineno` is out of bounds
+      #
+      def line_range(lineno)
+        index = lineno - @first_line + 1
+        if index <= 0 || index > line_begins.size
+          raise IndexError, 'Parser::Source::Buffer: range for line ' \
+            "#{lineno} requested, valid line numbers are #{@first_line}.." \
+            "#{@first_line + line_begins.size - 1}"
+        elsif index == line_begins.size
+          Range.new(self, line_begins[-index][1], @source.size)
+        else
+          Range.new(self, line_begins[-index][1], line_begins[-index - 1][1] - 1)
         end
+      end
 
-        @lines.fetch(lineno - @first_line).dup
+      ##
+      # Number of last line in the buffer
+      #
+      # @return [Integer]
+      #
+      def last_line
+        line_begins.size + @first_line - 1
       end
 
       private

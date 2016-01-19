@@ -4,7 +4,6 @@ module Parser
 
   class Lexer::Literal
     DELIMITERS = { '(' => ')', '[' => ']', '{' => '}', '<' => '>' }
-    MONOLITHIC = { :tSTRING_BEG => :tSTRING }
 
     TYPES = {
     # type       start token     interpolate?
@@ -34,10 +33,11 @@ module Parser
       '<<`' => [ :tXSTRING_BEG,  true  ],
     }
 
-    attr_reader   :heredoc_e, :str_s
+    attr_reader   :heredoc_e, :str_s, :dedent_level
     attr_accessor :saved_herebody_s
 
-    def initialize(lexer, str_type, delimiter, str_s, heredoc_e = nil, indent = false)
+    def initialize(lexer, str_type, delimiter, str_s, heredoc_e = nil,
+                   indent = false, dedent_body = false, label_allowed = false)
       @lexer       = lexer
       @nesting     = 1
 
@@ -60,8 +60,12 @@ module Parser
       @start_delim = DELIMITERS.include?(delimiter) ? delimiter : nil
       @end_delim   = DELIMITERS.fetch(delimiter, delimiter)
 
-      @heredoc_e   = heredoc_e
-      @indent      = indent
+      @heredoc_e     = heredoc_e
+      @indent        = indent
+      @label_allowed = label_allowed
+
+      @dedent_body   = dedent_body
+      @dedent_level  = nil
 
       @interp_braces = 0
 
@@ -74,9 +78,7 @@ module Parser
                       !heredoc?)
 
       # Capture opening delimiter in percent-literals.
-      unless @heredoc_e || @str_type.end_with?(delimiter)
-        @str_type << delimiter
-      end
+      @str_type << delimiter if @str_type.start_with?('%')
 
       clear_buffer
 
@@ -98,6 +100,10 @@ module Parser
 
     def heredoc?
       !!@heredoc_e
+    end
+
+    def backslash_delimited?
+      @end_delim == '\\'
     end
 
     def type
@@ -130,13 +136,13 @@ module Parser
         end
 
         if lookahead && lookahead[0] == ?: && lookahead[1] != ?: &&
-           %w(' ").include?(delimiter) && @start_tok == :tSTRING_BEG
+           @label_allowed && @start_tok == :tSTRING_BEG
           # This is a quoted label.
           flush_string
           emit(:tLABEL_END, @end_delim, ts, te + 1)
         elsif @monolithic
           # Emit the string as a single token.
-          emit(MONOLITHIC[@start_tok], @buffer, @str_s, te)
+          emit(:tSTRING, @buffer, @str_s, te)
         else
           # If this is a heredoc, @buffer contains the sentinel now.
           # Just throw it out. Lexer flushes the heredoc after each
@@ -144,6 +150,25 @@ module Parser
           flush_string unless heredoc?
 
           emit(:tSTRING_END, @end_delim, ts, te)
+        end
+      end
+    end
+
+    def infer_indent_level(line)
+      return if !@dedent_body
+
+      indent_level = 0
+      line.each_char do |char|
+        case char
+        when ?\s
+          indent_level += 1
+        when ?\t
+          indent_level += (8 - indent_level % 8)
+        else
+          if @dedent_level.nil? || @dedent_level > indent_level
+            @dedent_level = indent_level
+          end
+          break
         end
       end
     end
@@ -159,10 +184,7 @@ module Parser
     end
 
     def extend_string(string, ts, te)
-      if @buffer_s.nil?
-        @buffer_s = ts
-      end
-
+      @buffer_s ||= ts
       @buffer_e = te
 
       @buffer << string

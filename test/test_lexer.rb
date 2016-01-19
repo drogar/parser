@@ -308,6 +308,17 @@ class TestLexer < Minitest::Test
                    :tCOLON2, '::')
   end
 
+  def test_pct_string_colon__22
+    setup_lexer 22
+
+    assert_scanned("{%'a':",
+                   :tLBRACE,         '{',
+                   :tSTRING_BEG,     "%'",
+                   :tSTRING_CONTENT, 'a',
+                   :tSTRING_END,     "'",
+                   :tCOLON,          ':')
+  end
+
   def test_command_start__19
     setup_lexer 19
 
@@ -1096,6 +1107,55 @@ class TestLexer < Minitest::Test
     assert_scanned '?\M-\C-a', :tCHARACTER, "\M-\C-a"
   end
 
+  def test_question_eh_escape_u_1_digit
+    setup_lexer 19
+
+    refute_scanned '?\\u1'
+  end
+
+  def test_question_eh_escape_u_2_digits
+    setup_lexer 19
+
+    refute_scanned '?\\u12'
+  end
+
+  def test_question_eh_escape_u_3_digits
+    setup_lexer 19
+
+    refute_scanned '?\\u123'
+  end
+
+  def test_question_eh_escape_u_4_digits
+    if RUBY_VERSION >= '1.9'
+      setup_lexer 19
+      assert_scanned '?\\u0001', :tCHARACTER, "\u0001"
+    end
+  end
+
+  def test_question_eh_single_unicode_point
+    if RUBY_VERSION >= '1.9'
+      setup_lexer 19
+      assert_scanned '?\\u{123}', :tCHARACTER, "\u0123"
+
+      setup_lexer 19
+      assert_scanned '?\\u{a}',  :tCHARACTER, "\n"
+    end
+  end
+
+  def test_question_eh_multiple_unicode_points
+    setup_lexer 19
+    refute_scanned '?\\u{1 2 3}'
+
+    setup_lexer 19
+    refute_scanned '?\\u{a b}'
+  end
+
+  def test_question_eh_escape_u_unclosed_bracket
+    setup_lexer 19
+
+    refute_scanned '?\\u{123'
+  end
+
   def test_integer_hex
     assert_scanned "0x2a", :tINTEGER, 42
   end
@@ -1736,6 +1796,14 @@ class TestLexer < Minitest::Test
                    :tREGEXP_OPT,     "")
   end
 
+  def test_regexp_escape_other_meta
+    assert_scanned("/\\.\\$\\*\\+\\.\\?\\|/",
+                   :tREGEXP_BEG,     "/",
+                   :tSTRING_CONTENT, "\\.\\$\\*\\+\\.\\?\\|",
+                   :tSTRING_END,     "/",
+                   :tREGEXP_OPT,     "")
+  end
+
   def test_regexp_nm
     assert_scanned("/.*/nm",
                    :tREGEXP_BEG,     "/",
@@ -2037,7 +2105,7 @@ class TestLexer < Minitest::Test
 
   def test_string_pct_pct
     assert_scanned("%%blah%",
-                   :tSTRING_BEG,     '%',
+                   :tSTRING_BEG,     '%%',
                    :tSTRING_CONTENT, "blah",
                    :tSTRING_END,     '%')
   end
@@ -2097,6 +2165,48 @@ class TestLexer < Minitest::Test
                    :tSTRING_CONTENT, "s2",
                    :tSPACE,          nil,
                    :tSTRING_END,     ')')
+  end
+
+  def test_string_pct_backslash
+    assert_scanned("%\\a\\",
+                   :tSTRING_BEG, "%\\",
+                   :tSTRING_CONTENT, "a",
+                   :tSTRING_END, "\\")
+  end
+
+  def test_string_pct_backslash_with_bad_escape
+    # No escapes are allowed in a backslash-delimited string
+    refute_scanned("%\\a\\n\\",
+                   :tSTRING_BEG, "%\\",
+                   :tSTRING_CONTENT, "a",
+                   :tSTRING_END, "\\",
+                   :tIDENTIFIER, "n")
+  end
+
+  def test_string_pct_intertwined_with_heredoc
+    assert_scanned("<<-foo + %\\a\nbar\nfoo\nb\\",
+                   :tSTRING_BEG, "<<\"",
+                   :tSTRING_CONTENT, "bar\n",
+                   :tSTRING_END, "foo",
+                   :tPLUS, "+",
+                   :tSTRING_BEG, "%\\",
+                   :tSTRING_CONTENT, "a\n",
+                   :tSTRING_CONTENT, "b",
+                   :tSTRING_END, "\\")
+  end
+
+  def test_string_pct_q_backslash
+    assert_scanned("%q\\a\\",
+                   :tSTRING_BEG, "%q\\",
+                   :tSTRING_CONTENT, "a",
+                   :tSTRING_END, "\\")
+  end
+
+  def test_string_pct_Q_backslash
+    assert_scanned("%Q\\a\\",
+                   :tSTRING_BEG, "%Q\\",
+                   :tSTRING_CONTENT, "a",
+                   :tSTRING_END, "\\")
   end
 
   def test_string_single
