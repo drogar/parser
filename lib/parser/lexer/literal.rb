@@ -78,7 +78,7 @@ module Parser
                       !heredoc?)
 
       # Capture opening delimiter in percent-literals.
-      @str_type << delimiter if @str_type.start_with?('%')
+      @str_type << delimiter if @str_type.start_with?('%'.freeze)
 
       clear_buffer
 
@@ -103,7 +103,7 @@ module Parser
     end
 
     def backslash_delimited?
-      @end_delim == '\\'
+      @end_delim == '\\'.freeze
     end
 
     def type
@@ -116,7 +116,7 @@ module Parser
       if words? && character =~ /[ \t\v\r\f\n]/
         true
       else
-        ['\\', @start_delim, @end_delim].include?(character)
+        ['\\'.freeze, @start_delim, @end_delim].include?(character)
       end
     end
 
@@ -135,8 +135,8 @@ module Parser
           extend_space(ts, ts)
         end
 
-        if lookahead && lookahead[0] == ?: && lookahead[1] != ?: &&
-           @label_allowed && @start_tok == :tSTRING_BEG
+        if lookahead && @label_allowed && lookahead[0] == ?: &&
+           lookahead[1] != ?: && @start_tok == :tSTRING_BEG
           # This is a quoted label.
           flush_string
           emit(:tLABEL_END, @end_delim, ts, te + 1)
@@ -242,7 +242,7 @@ module Parser
       # Prime the buffer with lexer encoding; otherwise,
       # concatenation will produce varying results.
       if defined?(Encoding)
-        @buffer.force_encoding(@lexer.encoding)
+        @buffer.force_encoding(@lexer.source_buffer.source.encoding)
       end
 
       @buffer_s = nil

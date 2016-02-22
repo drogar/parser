@@ -34,6 +34,9 @@ module Parser
         if end_pos < begin_pos
           raise ArgumentError, 'Parser::Source::Range: end_pos must not be less than begin_pos'
         end
+        if source_buffer.nil?
+          raise ArgumentError, 'Parser::Source::Range: source_buffer must not be nil'
+        end
 
         @source_buffer       = source_buffer
         @begin_pos, @end_pos = begin_pos, end_pos
@@ -74,9 +77,7 @@ module Parser
       # @return [Integer] line number of the beginning of this range.
       #
       def line
-        line, _ = @source_buffer.decompose_position(@begin_pos)
-
-        line
+        @source_buffer.line_for_position(@begin_pos)
       end
 
       alias_method :first_line, :line
@@ -85,27 +86,21 @@ module Parser
       # @return [Integer] zero-based column number of the beginning of this range.
       #
       def column
-        _, column = @source_buffer.decompose_position(@begin_pos)
-
-        column
+        @source_buffer.column_for_position(@begin_pos)
       end
 
       ##
       # @return [Integer] line number of the end of this range.
       #
       def last_line
-        line, _ = @source_buffer.decompose_position(@end_pos)
-
-        line
+        @source_buffer.line_for_position(@end_pos)
       end
 
       ##
       # @return [Integer] zero-based column number of the end of this range.
       #
       def last_column
-        _, column = @source_buffer.decompose_position(@end_pos)
-
-        column
+        @source_buffer.column_for_position(@end_pos)
       end
 
       ##
@@ -131,7 +126,7 @@ module Parser
       # @return [String] all source code covered by this range.
       #
       def source
-        @source_buffer.source[self.begin_pos...self.end_pos]
+        @source_buffer.slice(self.begin_pos...self.end_pos)
       end
 
       ##
@@ -207,6 +202,21 @@ module Parser
       #
       def disjoint?(other)
         @begin_pos >= other.end_pos || other.begin_pos >= @end_pos
+      end
+
+      ##
+      # @param [Range] other
+      # @return [Boolean] `true` if this range and `other` overlap
+      #
+      def overlaps?(other)
+        @begin_pos < other.end_pos && other.begin_pos < @end_pos
+      end
+
+      ##
+      # Checks if a range is empty; if it contains no characters
+      # @return [Boolean]
+      def empty?
+        @begin_pos == @end_pos
       end
 
       ##
