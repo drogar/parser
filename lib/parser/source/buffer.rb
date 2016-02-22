@@ -40,8 +40,6 @@ module Parser
           )
         /x
 
-      NEW_LINE = "\n".freeze
-
       ##
       # Try to recognize encoding of `string` as Ruby would, i.e. by looking for
       # magic encoding comment or UTF-8 BOM. `string` can be in any encoding.
@@ -58,7 +56,7 @@ module Parser
 
         if first_line =~ /\A\xef\xbb\xbf/ # BOM
           return Encoding::UTF_8
-        elsif first_line[0, 2] == '#!'
+        elsif first_line[0, 2] == '#!'.freeze
           encoding_line = second_line
         else
           encoding_line = first_line
@@ -108,6 +106,13 @@ module Parser
 
         @lines       = nil
         @line_begins = nil
+
+        # UTF-32-reencoded source for O(1) slicing
+        @slice_source = nil
+
+        # Cache for fast lookup
+        @line_for_position   = {}
+        @column_for_position = {}
       end
 
       ##
@@ -175,7 +180,22 @@ module Parser
           raise ArgumentError, 'Source::Buffer is immutable'
         end
 
-        @source = input.gsub("\r\n", NEW_LINE).freeze
+        @source = input.gsub("\r\n".freeze, "\n".freeze).freeze
+
+        if defined?(Encoding) &&
+           !@source.ascii_only? &&
+           @source.encoding != Encoding::UTF_32LE &&
+           @source.encoding != Encoding::BINARY
+          @slice_source = @source.encode(Encoding::UTF_32LE)
+        end
+      end
+
+      def slice(range)
+        if @slice_source.nil?
+          @source[range]
+        else
+          @slice_source[range].encode(@source.encoding)
+        end
       end
 
       ##
@@ -191,6 +211,34 @@ module Parser
       end
 
       ##
+      # Convert a character index into the source to a line number.
+      #
+      # @param  [Integer] position
+      # @return [Integer] line
+      # @api private
+      #
+      def line_for_position(position)
+        @line_for_position[position] ||= begin
+          line_no, _ = line_for(position)
+          @first_line + line_no
+        end
+      end
+
+      ##
+      # Convert a character index into the source to a column number.
+      #
+      # @param  [Integer] position
+      # @return [Integer] column
+      # @api private
+      #
+      def column_for_position(position)
+        @column_for_position[position] ||= begin
+          _, line_begin = line_for(position)
+          position - line_begin
+        end
+      end
+
+      ##
       # Return an `Array` of source code lines.
       #
       # @return [Array<String>]
@@ -198,10 +246,10 @@ module Parser
       def source_lines
         @lines ||= begin
           lines = @source.lines.to_a
-          lines << '' if @source.end_with?("\n")
+          lines << '' if @source.end_with?("\n".freeze)
 
           lines.each do |line|
-            line.chomp!(NEW_LINE)
+            line.chomp!("\n".freeze)
             line.freeze
           end
 
@@ -253,14 +301,11 @@ module Parser
 
       def line_begins
         unless @line_begins
-          @line_begins, index = [ [ 0, 0 ] ], 1
+          @line_begins, index = [ [ 0, 0 ] ], 0
 
-          @source.each_char do |char|
-            if char == NEW_LINE
-              @line_begins.unshift [ @line_begins.length, index ]
-            end
-
+          while index = @source.index("\n".freeze, index)
             index += 1
+            @line_begins.unshift [ @line_begins.length, index ]
           end
         end
 
