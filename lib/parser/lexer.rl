@@ -1197,7 +1197,7 @@ class Parser::Lexer
     emit(:tIDENTIFIER)
 
     if !@static_env.nil? && @static_env.declared?(tok)
-      fnext expr_end; fbreak;
+      fnext expr_endfn; fbreak;
     else
       fnext *arg_or_cmdarg; fbreak;
     end
@@ -1281,6 +1281,17 @@ class Parser::Lexer
 
       ':'
       => { fhold; fgoto expr_beg; };
+
+      '%s' c_any
+      => {
+        if version?(23)
+          type, delimiter = tok[0..-2], tok[-1].chr
+          fgoto *push_literal(type, delimiter, @ts);
+        else
+          p = @ts - 1
+          fgoto expr_end;
+        end
+      };
 
       w_any;
 
@@ -1697,7 +1708,11 @@ class Parser::Lexer
         value = @escape || tok(@ts + 1)
 
         if version?(18)
-          emit(:tINTEGER, value[0].ord)
+          if defined?(Encoding)
+            emit(:tINTEGER, value.dup.force_encoding(Encoding::BINARY)[0].ord)
+          else
+            emit(:tINTEGER, value[0].ord)
+          end
         else
           emit(:tCHARACTER, value)
         end

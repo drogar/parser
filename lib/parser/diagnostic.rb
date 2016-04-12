@@ -82,18 +82,19 @@ module Parser
     # @return [Array<String>]
     #
     def render
-      if @location.line != @location.last_line
+      if @location.line == @location.last_line || @location.is?("\n")
+        ["#{@location}: #{@level}: #{message}"] + render_line(@location)
+      else
         # multi-line diagnostic
         first_line = first_line_only(@location)
         last_line  = last_line_only(@location)
+        num_lines  = (@location.last_line - @location.line) + 1
         buffer     = @location.source_buffer
 
         last_lineno, last_column = buffer.decompose_position(@location.end_pos)
         ["#{@location}-#{last_lineno}:#{last_column}: #{@level}: #{message}"] +
-          render_line(first_line, true, false) +
+          render_line(first_line, num_lines > 2, false) +
           render_line(last_line, false, true)
-      else
-        ["#{@location}: #{@level}: #{message}"] + render_line(@location)
       end
     end
 
@@ -104,7 +105,7 @@ module Parser
     #
     # @return [Array<String>]
     #
-    def render_line(range, range_start=false, range_end=false)
+    def render_line(range, ellipsis=false, range_end=false)
       source_line    = range.source_line
       highlight_line = ' ' * source_line.length
 
@@ -115,15 +116,17 @@ module Parser
         end
       end
 
-      if !range_end && range.size >= 1
-        highlight_line[range.column_range] = '^' + '~' * (range.size - 1)
+      if range.is?("\n")
+        highlight_line += "^"
       else
-        highlight_line[range.column_range] = '~' * range.size
+        if !range_end && range.size >= 1
+          highlight_line[range.column_range] = '^' + '~' * (range.size - 1)
+        else
+          highlight_line[range.column_range] = '~' * range.size
+        end
       end
 
-      if range_start
-        highlight_line += '...'
-      end
+      highlight_line += '...' if ellipsis
 
       [source_line, highlight_line].
         map { |line| "#{range.source_buffer.name}:#{range.line}: #{line}" }
@@ -150,7 +153,7 @@ module Parser
     def last_line_only(range)
       if range.line != range.last_line
         Source::Range.new(range.source_buffer,
-                          range.begin_pos + (range.source =~ /[^\n]*\Z/),
+                          range.begin_pos + (range.source =~ /[^\n]*\z/),
                           range.end_pos)
       else
         range
