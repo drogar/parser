@@ -5114,6 +5114,31 @@ class TestParser < Minitest::Test
     end
   end
 
+  def test_tokenize_recover
+    with_versions(ALL_VERSIONS) do |_ver, parser|
+      source_file = Parser::Source::Buffer.new('(tokenize)')
+      source_file.source = "1 + # foo\n "
+
+      range = lambda do |from, to|
+        Parser::Source::Range.new(source_file, from, to)
+      end
+
+      ast, comments, tokens = parser.tokenize(source_file, true)
+
+      assert_equal nil, ast
+
+      assert_equal [
+                     Parser::Source::Comment.new(range.call(4, 9))
+                   ], comments
+
+      assert_equal [
+                     [:tINTEGER, [ 1,       range.call(0, 1) ]],
+                     [:tPLUS,    [ '+',     range.call(2, 3) ]],
+                     [:tCOMMENT, [ '# foo', range.call(4, 9) ]],
+                   ], tokens
+    end
+  end
+
   #
   # Bug-specific tests
   #
@@ -5198,6 +5223,53 @@ class TestParser < Minitest::Test
           s(:dstr)),
         s(:args), nil),
       %Q{f <<-TABLE do\nTABLE\nend})
+  end
+
+  def test_bug_ascii_8bit_in_literal
+    if defined?(Encoding)
+      assert_diagnoses(
+        [:error, :invalid_encoding],
+        %q{".\xc3."},
+        %q{^^^^^^^^ location},
+        ALL_VERSIONS)
+
+      assert_diagnoses(
+        [:error, :invalid_encoding],
+        %q{%W"x .\xc3."},
+        %q{     ^^^^^^ location},
+        ALL_VERSIONS)
+
+      assert_diagnoses(
+        [:error, :invalid_encoding],
+        %q{:".\xc3."},
+        %q{  ^^^^^^ location},
+        ALL_VERSIONS)
+    end
+
+    assert_diagnoses(
+      [:error, :invalid_encoding],
+      %q{%I"x .\xc3."},
+      %q{     ^^^^^^ location},
+      ALL_VERSIONS - %w(1.8 1.9 ios mac))
+
+    assert_parses(
+      s(:int, 0xc3),
+      %q{?\xc3},
+      %q{},
+      %w(1.8))
+
+    assert_diagnoses(
+      [:error, :invalid_encoding],
+      %q{?\xc3},
+      %q{^^^^^ location},
+      ALL_VERSIONS - %w(1.8))
+
+    assert_parses(
+      s(:str, "проверка"),
+      %q{# coding:utf-8
+         "\xD0\xBF\xD1\x80\xD0\xBE\xD0\xB2\xD0\xB5\xD1\x80\xD0\xBA\xD0\xB0"},
+      %q{},
+      ALL_VERSIONS - %w(1.8))
   end
 
   def test_ruby_bug_9669
@@ -5316,6 +5388,21 @@ class TestParser < Minitest::Test
       %Q{p <<~E "  y"\n  x\nE},
       %q{},
       ALL_VERSIONS - %w(1.8 1.9 2.0 2.1 2.2 ios mac))
+  end
+
+  def test_ruby_bug_12073
+    assert_parses(
+      s(:begin,
+        s(:lvasgn, :a,
+          s(:int, 1)),
+        s(:send, nil, :a,
+          s(:hash,
+            s(:pair,
+              s(:sym, :b),
+              s(:int, 1))))),
+      %q{a = 1; a b: 1},
+      %q{},
+      ALL_VERSIONS - %w(1.8))
   end
 
   def test_parser_bug_198
